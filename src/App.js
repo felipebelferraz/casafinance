@@ -1,8 +1,11 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { db } from "./firebase";
-import {
-  collection, doc, setDoc, deleteDoc, onSnapshot, getDoc
-} from "firebase/firestore";
+import { collection, doc, setDoc, deleteDoc, onSnapshot } from "firebase/firestore";
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "firebase/auth";
+
+// ─── Auth setup ───────────────────────────────────────────────────────────────
+const auth = getAuth();
+const provider = new GoogleAuthProvider();
 
 // ─── Icons ───────────────────────────────────────────────────────────────────
 const Icon = ({ d, size = 16, stroke = "currentColor", fill = "none", strokeWidth = 1.8 }) => (
@@ -10,35 +13,32 @@ const Icon = ({ d, size = 16, stroke = "currentColor", fill = "none", strokeWidt
     <path d={d} />
   </svg>
 );
-const icons = {
-  plus: "M12 5v14M5 12h14",
-  check: "M20 6L9 17l-5-5",
-  trash: "M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6",
+const ic = {
+  plus: "M12 5v14M5 12h14", check: "M20 6L9 17l-5-5", trash: "M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6",
   edit: "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z",
   car: "M5 17H3a2 2 0 01-2-2V9a2 2 0 012-2h14l4 4v4a2 2 0 01-2 2h-2M5 17a2 2 0 104 0 2 2 0 00-4 0zm10 0a2 2 0 104 0 2 2 0 00-4 0z",
   home: "M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10",
   heart: "M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z",
   bolt: "M13 2L3 14h9l-1 8 10-12h-9l1-8z",
-  piggy: "M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0016.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 002 8.5c0 2.3 1.5 4.05 3 5.5l7 7 7-7z",
-  chart: "M18 20V10M12 20V4M6 20v-6",
-  arrow_up: "M12 19V5M5 12l7-7 7 7",
-  warning: "M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01",
-  x: "M18 6L6 18M6 6l12 12",
-  chevron_right: "M9 18l6-6-6-6",
-  chevron_down: "M6 9l6 6 6-6",
+  chart: "M18 20V10M12 20V4M6 20v-6", warning: "M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01",
+  x: "M18 6L6 18M6 6l12 12", chevron_right: "M9 18l6-6-6-6", chevron_down: "M6 9l6 6 6-6",
   repeat: "M17 1l4 4-4 4M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 01-4 4H3",
   target: "M12 22a10 10 0 100-20 10 10 0 000 20zM12 18a6 6 0 100-12 6 6 0 000 12zM12 14a2 2 0 100-4 2 2 0 000 4z",
   wallet: "M21 12V7H5a2 2 0 010-4h14v4M3 5v14a2 2 0 002 2h16v-5M3 5a2 2 0 000 4M21 16a1 1 0 110 2 1 1 0 010-2z",
   tag: "M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82zM7 7h.01",
   grid: "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z",
   coin: "M12 2a10 10 0 100 20A10 10 0 0012 2zM12 8v8M8 12h8",
-  save: "M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2zM17 21v-8H7v8M7 3v5h8",
+  logout: "M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9",
+  filter: "M22 3H2l8 9.46V19l4 2v-8.54L22 3z",
+  piggy: "M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0016.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 002 8.5c0 2.3 1.5 4.05 3 5.5l7 7 7-7z",
+  star: "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z",
+  arrow_up: "M12 19V5M5 12l7-7 7 7",
 };
 
 const MONTHS_FULL = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const MONTHS = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 const fmt = (v) => (v||0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-const pct = (part, total) => total === 0 ? 0 : Math.round((part / total) * 100);
+const pct = (part, total) => total === 0 ? 0 : Math.min(100, Math.round((part / total) * 100));
 const TODAY = new Date();
 const CURRENT_MONTH = TODAY.getMonth();
 const CURRENT_YEAR = TODAY.getFullYear();
@@ -50,79 +50,185 @@ const DEFAULT_GROUPS = [
   { id: "g4", name: "Energia & Utilities", icon: "bolt", color: "#10b981" },
 ];
 
+const DEFAULT_REV_GROUPS = [
+  { id: "rg1", name: "Salário", icon: "wallet", color: "#10b981" },
+  { id: "rg2", name: "Freelance", icon: "star", color: "#6366f1" },
+  { id: "rg3", name: "Outros", icon: "coin", color: "#f59e0b" },
+];
+
+// ─── SPLASH SCREEN ────────────────────────────────────────────────────────────
+function SplashScreen({ onDone }) {
+  useEffect(() => { const t = setTimeout(onDone, 3200); return () => clearTimeout(t); }, [onDone]);
+  return (
+    <div style={sp.wrap}>
+      <div style={sp.bg} />
+      <div style={sp.content}>
+        <div style={sp.logoWrap}>
+          <div style={sp.logoCircle}>
+            <span style={sp.logoEmoji}>🏠</span>
+          </div>
+          <div style={sp.rings}>
+            <div style={{ ...sp.ring, animationDelay: "0s" }} />
+            <div style={{ ...sp.ring, animationDelay: "0.4s" }} />
+            <div style={{ ...sp.ring, animationDelay: "0.8s" }} />
+          </div>
+        </div>
+        <div style={sp.title}>CasaFinance</div>
+        <div style={sp.subtitle}>Gestão Doméstica Inteligente</div>
+        <div style={sp.dots}>
+          <div style={{ ...sp.dot, animationDelay: "0s" }} />
+          <div style={{ ...sp.dot, animationDelay: "0.2s" }} />
+          <div style={{ ...sp.dot, animationDelay: "0.4s" }} />
+        </div>
+      </div>
+      <style>{`
+        @keyframes pulse-ring { 0%{transform:scale(1);opacity:.6} 100%{transform:scale(2.5);opacity:0} }
+        @keyframes dot-bounce { 0%,80%,100%{transform:scale(0.6);opacity:.4} 40%{transform:scale(1);opacity:1} }
+        @keyframes fade-up { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes logo-pop { 0%{transform:scale(0);opacity:0} 60%{transform:scale(1.2)} 100%{transform:scale(1);opacity:1} }
+      `}</style>
+    </div>
+  );
+}
+const sp = {
+  wrap: { position:"fixed",inset:0,zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%)" },
+  bg: { position:"absolute",inset:0,backgroundImage:"radial-gradient(ellipse at 30% 50%, rgba(99,102,241,0.15) 0%, transparent 60%), radial-gradient(ellipse at 70% 50%, rgba(236,72,153,0.1) 0%, transparent 60%)" },
+  content: { display:"flex",flexDirection:"column",alignItems:"center",gap:16,position:"relative",zIndex:1 },
+  logoWrap: { position:"relative",display:"flex",alignItems:"center",justifyContent:"center",width:120,height:120 },
+  logoCircle: { width:90,height:90,borderRadius:"50%",background:"linear-gradient(135deg,#6366f1,#ec4899)",display:"flex",alignItems:"center",justifyContent:"center",animation:"logo-pop 0.6s ease forwards",boxShadow:"0 0 40px rgba(99,102,241,0.5)" },
+  logoEmoji: { fontSize:42 },
+  rings: { position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center" },
+  ring: { position:"absolute",width:90,height:90,borderRadius:"50%",border:"2px solid rgba(99,102,241,0.6)",animation:"pulse-ring 2s ease-out infinite" },
+  title: { fontSize:32,fontWeight:800,color:"#fff",letterSpacing:-1,animation:"fade-up 0.6s ease 0.4s both" },
+  subtitle: { fontSize:14,color:"#94a3b8",animation:"fade-up 0.6s ease 0.6s both" },
+  dots: { display:"flex",gap:8,marginTop:24,animation:"fade-up 0.6s ease 0.8s both" },
+  dot: { width:8,height:8,borderRadius:"50%",background:"#6366f1",animation:"dot-bounce 1.2s ease infinite" },
+};
+
+// ─── LOGIN SCREEN ─────────────────────────────────────────────────────────────
+function LoginScreen({ onLogin }) {
+  const [loading, setLoading] = useState(false);
+  const handleLogin = async () => {
+    setLoading(true);
+    try { await signInWithPopup(auth, provider); }
+    catch(e) { console.error(e); setLoading(false); }
+  };
+  return (
+    <div style={ls.wrap}>
+      <div style={ls.bg} />
+      <div style={ls.card}>
+        <div style={ls.logoCircle}><span style={{fontSize:36}}>🏠</span></div>
+        <div style={ls.title}>CasaFinance</div>
+        <div style={ls.sub}>Gestão Doméstica Inteligente</div>
+        <div style={ls.divider} />
+        <div style={ls.welcome}>Bem-vindo de volta!</div>
+        <div style={ls.desc}>Faça login para acessar suas finanças com segurança.</div>
+        <button style={{ ...ls.btn, opacity: loading ? 0.7 : 1 }} onClick={handleLogin} disabled={loading}>
+          <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+          {loading ? "Entrando..." : "Entrar com Google"}
+        </button>
+        <div style={ls.footer}>🔒 Seus dados são privados e protegidos</div>
+      </div>
+      <style>{`@keyframes fade-up{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}`}</style>
+    </div>
+  );
+}
+const ls = {
+  wrap: { minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#0f172a,#1e293b)",fontFamily:"'DM Sans',sans-serif",padding:16 },
+  bg: { position:"fixed",inset:0,backgroundImage:"radial-gradient(ellipse at 30% 50%,rgba(99,102,241,0.15) 0%,transparent 60%),radial-gradient(ellipse at 70% 50%,rgba(236,72,153,0.1) 0%,transparent 60%)" },
+  card: { background:"rgba(255,255,255,0.04)",backdropFilter:"blur(20px)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:24,padding:40,maxWidth:380,width:"100%",display:"flex",flexDirection:"column",alignItems:"center",gap:12,position:"relative",zIndex:1,animation:"fade-up 0.6s ease" },
+  logoCircle: { width:80,height:80,borderRadius:"50%",background:"linear-gradient(135deg,#6366f1,#ec4899)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 30px rgba(99,102,241,0.4)",marginBottom:8 },
+  title: { fontSize:28,fontWeight:800,color:"#fff",letterSpacing:-0.5 },
+  sub: { fontSize:13,color:"#64748b" },
+  divider: { width:"100%",height:1,background:"rgba(255,255,255,0.08)",margin:"8px 0" },
+  welcome: { fontSize:18,fontWeight:700,color:"#fff",marginTop:4 },
+  desc: { fontSize:13,color:"#94a3b8",textAlign:"center" },
+  btn: { display:"flex",alignItems:"center",gap:12,background:"#fff",color:"#1e293b",border:"none",borderRadius:12,padding:"14px 24px",fontSize:15,fontWeight:600,cursor:"pointer",width:"100%",justifyContent:"center",marginTop:8,transition:"transform .15s",boxShadow:"0 4px 20px rgba(0,0,0,0.3)" },
+  footer: { fontSize:11,color:"#475569",marginTop:8 },
+};
+
+// ─── MAIN APP ────────────────────────────────────────────────────────────────
 export default function App() {
+  const [splash, setSplash] = useState(true);
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, u => { setUser(u); setAuthLoading(false); });
+    return unsub;
+  }, []);
+
+  if (splash) return <SplashScreen onDone={() => setSplash(false)} />;
+  if (authLoading) return <LoadingScreen />;
+  if (!user) return <LoginScreen />;
+  return <Dashboard user={user} />;
+}
+
+function LoadingScreen() {
+  return (
+    <div style={{ display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",flexDirection:"column",gap:16,fontFamily:"DM Sans,sans-serif",background:"#f8fafc" }}>
+      <div style={{ fontSize:48 }}>🏠</div>
+      <div style={{ fontWeight:700,fontSize:20,color:"#1e293b" }}>CasaFinance</div>
+      <div style={{ color:"#94a3b8",fontSize:14 }}>Carregando...</div>
+    </div>
+  );
+}
+
+// ─── DASHBOARD ───────────────────────────────────────────────────────────────
+function Dashboard({ user }) {
+  const uid = user.uid;
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selMonth, setSelMonth] = useState(CURRENT_MONTH);
   const [selYear, setSelYear] = useState(CURRENT_YEAR);
   const [expenses, setExpenses] = useState([]);
   const [groups, setGroups] = useState(DEFAULT_GROUPS);
   const [revenues, setRevenues] = useState([]);
-  const [piggy, setPiggy] = useState({ balance: 0, goal: 10000, deposits: [] });
+  const [revGroups, setRevGroups] = useState(DEFAULT_REV_GROUPS);
+  const [goals, setGoals] = useState([]);
   const [savingGoal, setSavingGoal] = useState(20);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [showGroupForm, setShowGroupForm] = useState(false);
-  const [showRevenueForm, setShowRevenueForm] = useState(false);
-  const [showPiggyForm, setShowPiggyForm] = useState(false);
+  const [showRevForm, setShowRevForm] = useState(false);
+  const [showRevGroupForm, setShowRevGroupForm] = useState(false);
+  const [showGoalForm, setShowGoalForm] = useState(false);
+  const [editGoal, setEditGoal] = useState(null);
+  const [histFilter, setHistFilter] = useState("all");
   const [toast, setToast] = useState(null);
 
-  const notify = (msg, type = "success") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
-  };
+  const notify = (msg, type = "success") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
 
-  // ─── Firebase listeners ───────────────────────────────────────────────────
   useEffect(() => {
-    const unsubs = [];
-
-    unsubs.push(onSnapshot(collection(db, "expenses"), snap => {
-      setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    }));
-
-    unsubs.push(onSnapshot(collection(db, "revenues"), snap => {
-      setRevenues(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }));
-
-    unsubs.push(onSnapshot(collection(db, "groups"), snap => {
-      const g = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      if (g.length > 0) setGroups(g);
-    }));
-
-    unsubs.push(onSnapshot(doc(db, "settings", "piggy"), snap => {
-      if (snap.exists()) setPiggy(snap.data());
-    }));
-
-    unsubs.push(onSnapshot(doc(db, "settings", "prefs"), snap => {
-      if (snap.exists() && snap.data().savingGoal) setSavingGoal(snap.data().savingGoal);
-    }));
-
+    const base = `users/${uid}`;
+    const unsubs = [
+      onSnapshot(collection(db, `${base}/expenses`), snap => { setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false); }),
+      onSnapshot(collection(db, `${base}/revenues`), snap => setRevenues(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
+      onSnapshot(collection(db, `${base}/groups`), snap => { const g = snap.docs.map(d => ({ id: d.id, ...d.data() })); if (g.length > 0) setGroups(g); }),
+      onSnapshot(collection(db, `${base}/revGroups`), snap => { const g = snap.docs.map(d => ({ id: d.id, ...d.data() })); if (g.length > 0) setRevGroups(g); }),
+      onSnapshot(collection(db, `${base}/goals`), snap => setGoals(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
+      onSnapshot(doc(db, `${base}/settings/prefs`), snap => { if (snap.exists()) { const d = snap.data(); if (d.savingGoal) setSavingGoal(d.savingGoal); } }),
+    ];
     return () => unsubs.forEach(u => u());
-  }, []);
+  }, [uid]);
 
-  // ─── Computed ────────────────────────────────────────────────────────────
-  const monthExpenses = useMemo(() =>
-    expenses.filter(e => e.month === selMonth && e.year === selYear),
-    [expenses, selMonth, selYear]
-  );
-  const monthRevenue = useMemo(() =>
-    revenues.filter(r => r.month === selMonth && r.year === selYear).reduce((s, r) => s + r.value, 0),
-    [revenues, selMonth, selYear]
-  );
-  const totalExpenses = useMemo(() => monthExpenses.reduce((s, e) => s + e.value, 0), [monthExpenses]);
-  const paidExpenses = useMemo(() => monthExpenses.filter(e => e.paid).reduce((s, e) => s + e.value, 0), [monthExpenses]);
-  const openExpenses = totalExpenses - paidExpenses;
-  const balance = monthRevenue - totalExpenses;
-  const savingTarget = monthRevenue * (savingGoal / 100);
+  const base = `users/${uid}`;
+
+  const monthExpenses = useMemo(() => expenses.filter(e => e.month === selMonth && e.year === selYear), [expenses, selMonth, selYear]);
+  const monthRevenues = useMemo(() => revenues.filter(r => r.month === selMonth && r.year === selYear), [revenues, selMonth, selYear]);
+  const totalExpenses = useMemo(() => monthExpenses.reduce((s, e) => s + (e.value || 0), 0), [monthExpenses]);
+  const totalRevenue = useMemo(() => monthRevenues.reduce((s, r) => s + (r.value || 0), 0), [monthRevenues]);
+  const paidExpenses = useMemo(() => monthExpenses.filter(e => e.paid).reduce((s, e) => s + (e.value || 0), 0), [monthExpenses]);
+  const balance = totalRevenue - totalExpenses;
+  const savingTarget = totalRevenue * (savingGoal / 100);
 
   const history = useMemo(() => {
     const arr = [];
     for (let i = 11; i >= 0; i--) {
       let m = CURRENT_MONTH - i; let y = CURRENT_YEAR;
       if (m < 0) { m += 12; y -= 1; }
-      const total = expenses.filter(e => e.month === m && e.year === y).reduce((s, e) => s + e.value, 0);
-      const rev = revenues.filter(r => r.month === m && r.year === y).reduce((s, r) => s + r.value, 0);
+      const total = expenses.filter(e => e.month === m && e.year === y).reduce((s, e) => s + (e.value || 0), 0);
+      const rev = revenues.filter(r => r.month === m && r.year === y).reduce((s, r) => s + (r.value || 0), 0);
       arr.push({ month: m, year: y, total, rev, label: MONTHS[m] });
     }
     return arr;
@@ -134,146 +240,180 @@ export default function App() {
     const prevYear = selMonth === 0 ? selYear - 1 : selYear;
     monthExpenses.forEach(curr => {
       const prev = expenses.find(e => e.description === curr.description && e.groupId === curr.groupId && e.month === prevMonth && e.year === prevYear);
-      if (prev && curr.value > prev.value * 1.15) {
-        warns.push({ desc: curr.description, curr: curr.value, prev: prev.value, pct: Math.round(((curr.value - prev.value) / prev.value) * 100) });
-      }
+      if (prev && curr.value > prev.value * 1.15) warns.push({ desc: curr.description, curr: curr.value, prev: prev.value, pct: Math.round(((curr.value - prev.value) / prev.value) * 100) });
     });
     return warns;
   }, [monthExpenses, expenses, selMonth, selYear]);
 
-  // ─── Actions ─────────────────────────────────────────────────────────────
-  const togglePaid = async (id) => {
-    const item = expenses.find(e => e.id === id);
-    await setDoc(doc(db, "expenses", id), { ...item, paid: !item.paid });
-  };
-
-  const deleteExpense = async (id) => {
-    await deleteDoc(doc(db, "expenses", id));
-    notify("Despesa removida");
-  };
-
-  const saveExpense = async (data) => {
-    if (data.id) {
-      await setDoc(doc(db, "expenses", data.id), data);
-      notify("Despesa atualizada");
-    } else {
-      const newItems = [];
-      const base = { ...data, id: `exp_${Date.now()}` };
-      newItems.push(base);
-      if (data.recurring) {
-        for (let i = 1; i <= 11; i++) {
-          let m = data.month + i; let y = data.year;
-          if (m > 11) { m -= 12; y += 1; }
-          newItems.push({ ...data, id: `exp_${Date.now()}_${i}`, month: m, year: y });
-        }
-      }
-      for (const item of newItems) {
-        await setDoc(doc(db, "expenses", item.id), item);
-      }
-      notify(data.recurring ? "Despesa recorrente adicionada para 12 meses!" : "Despesa adicionada!");
-    }
-    setShowForm(false);
-    setEditItem(null);
-  };
-
-  const addGroup = async (name, icon, color) => {
-    const id = `g_${Date.now()}`;
-    await setDoc(doc(db, "groups", id), { id, name, icon, color });
-    setShowGroupForm(false);
-    notify("Grupo criado!");
-  };
-
-  const saveRevenue = async (desc, value) => {
-    const id = `rev_${selMonth}_${selYear}_${desc.replace(/\s/g,"_")}`;
-    await setDoc(doc(db, "revenues", id), { id, description: desc, value, month: selMonth, year: selYear });
-    setShowRevenueForm(false);
-    notify("Receita salva!");
-  };
-
-  const addPiggyDeposit = async (value, note) => {
-    const updated = { ...piggy, balance: (piggy.balance || 0) + value, deposits: [...(piggy.deposits || []), { date: new Date().toISOString().slice(0,10), value, note }] };
-    await setDoc(doc(db, "settings", "piggy"), updated);
-    setShowPiggyForm(false);
-    notify("Depósito no cofrinho realizado 🐷");
-  };
-
-  const saveSavingGoal = async (val) => {
-    setSavingGoal(val);
-    await setDoc(doc(db, "settings", "prefs"), { savingGoal: val });
-  };
-
   const byGroup = useMemo(() =>
-    groups.map(g => ({ ...g, items: monthExpenses.filter(e => e.groupId === g.id), total: monthExpenses.filter(e => e.groupId === g.id).reduce((s, e) => s + e.value, 0) })).filter(g => g.items.length > 0),
+    groups.map(g => ({ ...g, items: monthExpenses.filter(e => e.groupId === g.id), total: monthExpenses.filter(e => e.groupId === g.id).reduce((s, e) => s + (e.value || 0), 0) })).filter(g => g.items.length > 0),
     [groups, monthExpenses]
   );
 
+  const pieData = useMemo(() => {
+    const total = byGroup.reduce((s, g) => s + g.total, 0);
+    let cumulative = 0;
+    return byGroup.map(g => {
+      const slice = total > 0 ? (g.total / total) * 360 : 0;
+      const start = cumulative;
+      cumulative += slice;
+      return { ...g, slice, start, pct: pct(g.total, total) };
+    });
+  }, [byGroup]);
+
+  // Actions
+  const togglePaid = async (id) => {
+    const item = expenses.find(e => e.id === id);
+    await setDoc(doc(db, `${base}/expenses`, id), { ...item, paid: !item.paid });
+  };
+  const deleteExpense = async (id) => { await deleteDoc(doc(db, `${base}/expenses`, id)); notify("Despesa removida"); };
+  const saveExpense = async (data) => {
+    const months = data.recurring ? parseInt(data.recurMonths || 12) : 1;
+    if (data.id) {
+      await setDoc(doc(db, `${base}/expenses`, data.id), data);
+      notify("Despesa atualizada!");
+    } else {
+      for (let i = 0; i < months; i++) {
+        let m = data.month + i; let y = data.year;
+        if (m > 11) { m -= 12; y += 1; }
+        const id = `exp_${Date.now()}_${i}`;
+        await setDoc(doc(db, `${base}/expenses`, id), { ...data, id, month: m, year: y });
+      }
+      notify(months > 1 ? `Despesa lançada para ${months} meses!` : "Despesa adicionada!");
+    }
+    setShowForm(false); setEditItem(null);
+  };
+  const addGroup = async (name, icon, color) => {
+    const id = `g_${Date.now()}`;
+    await setDoc(doc(db, `${base}/groups`, id), { id, name, icon, color });
+    setShowGroupForm(false); notify("Grupo criado!");
+  };
+  const saveRevenue = async (data) => {
+    const months = data.recurring ? parseInt(data.recurMonths || 12) : 1;
+    if (data.id) {
+      await setDoc(doc(db, `${base}/revenues`, data.id), data);
+      notify("Receita atualizada!");
+    } else {
+      for (let i = 0; i < months; i++) {
+        let m = data.month + i; let y = data.year;
+        if (m > 11) { m -= 12; y += 1; }
+        const id = `rev_${Date.now()}_${i}`;
+        await setDoc(doc(db, `${base}/revenues`, id), { ...data, id, month: m, year: y });
+      }
+      notify(months > 1 ? `Receita lançada para ${months} meses!` : "Receita adicionada!");
+    }
+    setShowRevForm(false);
+  };
+  const deleteRevenue = async (id) => { await deleteDoc(doc(db, `${base}/revenues`, id)); notify("Receita removida"); };
+  const addRevGroup = async (name, icon, color) => {
+    const id = `rg_${Date.now()}`;
+    await setDoc(doc(db, `${base}/revGroups`, id), { id, name, icon, color });
+    setShowRevGroupForm(false); notify("Categoria de receita criada!");
+  };
+  const saveGoal = async (data) => {
+    const id = data.id || `goal_${Date.now()}`;
+    await setDoc(doc(db, `${base}/goals`, id), { ...data, id });
+    setShowGoalForm(false); setEditGoal(null); notify(data.id ? "Meta atualizada!" : "Meta criada! 🎯");
+  };
+  const depositGoal = async (goal, value, note) => {
+    const updated = { ...goal, saved: (goal.saved || 0) + value, deposits: [...(goal.deposits || []), { date: new Date().toISOString().slice(0, 10), value, note }] };
+    await setDoc(doc(db, `${base}/goals`, goal.id), updated);
+    notify("Depósito realizado! 💰");
+  };
+  const deleteGoal = async (id) => { await deleteDoc(doc(db, `${base}/goals`, id)); notify("Meta removida"); };
+  const saveSavingGoal = async (val) => { setSavingGoal(val); await setDoc(doc(db, `${base}/settings/prefs`), { savingGoal: val }); };
+
   const maxHistory = Math.max(...history.map(h => Math.max(h.total, h.rev)), 1);
 
-  if (loading) return (
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", flexDirection:"column", gap:16, fontFamily:"DM Sans, sans-serif" }}>
-      <div style={{ fontSize:48 }}>🏠</div>
-      <div style={{ fontWeight:700, fontSize:20, color:"#1e293b" }}>CasaFinance</div>
-      <div style={{ color:"#94a3b8", fontSize:14 }}>Carregando seus dados...</div>
-    </div>
-  );
+  const filteredHistory = useMemo(() => {
+    if (histFilter === "all") return history;
+    const gId = histFilter;
+    return history.map(h => ({
+      ...h,
+      total: expenses.filter(e => e.month === h.month && e.year === h.year && e.groupId === gId).reduce((s, e) => s + (e.value || 0), 0),
+    }));
+  }, [history, histFilter, expenses]);
+
+  const greetings = () => {
+    const h = TODAY.getHours();
+    if (h < 12) return "Bom dia";
+    if (h < 18) return "Boa tarde";
+    return "Boa noite";
+  };
+
+  if (loading) return <LoadingScreen />;
 
   return (
     <div style={S.app}>
+      <style>{`
+        @keyframes slide-up{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes toast-in{from{opacity:0;transform:translate(-50%,-20px)}to{opacity:1;transform:translate(-50%,0)}}
+        * { box-sizing: border-box; }
+        input[type=range]{-webkit-appearance:none;height:6px;border-radius:99px;background:#e2e8f0;outline:none}
+        input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#6366f1;cursor:pointer;box-shadow:0 2px 6px rgba(99,102,241,0.4)}
+      `}</style>
+
       {toast && <div style={{ ...S.toast, background: toast.type === "success" ? "#10b981" : "#ef4444" }}>{toast.msg}</div>}
 
+      {/* Header */}
       <header style={S.header}>
         <div style={S.headerInner}>
           <div style={S.logo}>
-            <span style={S.logoIcon}>₿</span>
+            <div style={S.logoCircle}><span style={{ fontSize: 18 }}>🏠</span></div>
             <div>
               <div style={S.logoTitle}>CasaFinance</div>
-              <div style={S.logoSub}>Gestão Doméstica Inteligente</div>
+              <div style={S.logoSub}>{greetings()}, {user.displayName?.split(" ")[0]}!</div>
             </div>
           </div>
-          <div style={S.monthNav}>
-            <button style={S.navBtn} onClick={() => { if (selMonth===0){setSelMonth(11);setSelYear(y=>y-1);}else setSelMonth(m=>m-1); }}>‹</button>
-            <span style={S.monthLabel}>{MONTHS_FULL[selMonth]} {selYear}</span>
-            <button style={S.navBtn} onClick={() => { if (selMonth===11){setSelMonth(0);setSelYear(y=>y+1);}else setSelMonth(m=>m+1); }}>›</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={S.monthNav}>
+              <button style={S.navBtn} onClick={() => { if (selMonth === 0) { setSelMonth(11); setSelYear(y => y - 1); } else setSelMonth(m => m - 1); }}>‹</button>
+              <span style={S.monthLabel}>{MONTHS[selMonth]}/{selYear}</span>
+              <button style={S.navBtn} onClick={() => { if (selMonth === 11) { setSelMonth(0); setSelYear(y => y + 1); } else setSelMonth(m => m + 1); }}>›</button>
+            </div>
+            <button style={S.logoutBtn} onClick={() => signOut(auth)} title="Sair">
+              <Icon d={ic.logout} size={16} stroke="#94a3b8" />
+            </button>
           </div>
         </div>
       </header>
 
+      {/* Tabs */}
       <nav style={S.nav}>
-        {[{id:"dashboard",label:"Painel",icon:"grid"},{id:"expenses",label:"Despesas",icon:"tag"},{id:"piggy",label:"Cofrinho",icon:"piggy"},{id:"history",label:"Evolução",icon:"chart"}].map(t => (
-          <button key={t.id} style={{...S.tab,...(activeTab===t.id?S.tabActive:{})}} onClick={()=>setActiveTab(t.id)}>
-            <Icon d={icons[t.icon]} size={14}/>{t.label}
+        {[{ id: "dashboard", label: "Painel", icon: "grid" }, { id: "expenses", label: "Despesas", icon: "tag" }, { id: "revenues", label: "Receitas", icon: "wallet" }, { id: "goals", label: "Metas", icon: "target" }, { id: "history", label: "Histórico", icon: "chart" }].map(t => (
+          <button key={t.id} style={{ ...S.tab, ...(activeTab === t.id ? S.tabActive : {}) }} onClick={() => setActiveTab(t.id)}>
+            <Icon d={ic[t.icon]} size={13} />{t.label}
           </button>
         ))}
       </nav>
 
       <main style={S.main}>
-        {/* DASHBOARD */}
-        {activeTab==="dashboard" && (
+        {/* ── DASHBOARD ── */}
+        {activeTab === "dashboard" && (
           <div style={S.section}>
             <div style={S.kpiGrid}>
-              <KpiCard label="Receita do Mês" value={fmt(monthRevenue)} icon="wallet" color="#10b981"
-                sub={<button style={S.linkBtn} onClick={()=>setShowRevenueForm(true)}>+ Lançar receita</button>} />
-              <KpiCard label="Total Despesas" value={fmt(totalExpenses)} icon="tag" color="#f59e0b" sub={`${pct(totalExpenses,monthRevenue)}% da receita`} />
-              <KpiCard label="Saldo" value={fmt(balance)} icon="chart" color={balance>=0?"#6366f1":"#ef4444"} sub={balance>=0?"✓ Dentro do orçamento":"⚠ Acima da receita"} />
-              <KpiCard label="Meta de Economia" value={fmt(savingTarget)} icon="target" color="#ec4899" sub={`${savingGoal}% da receita`} />
+              <KpiCard label="Receita" value={fmt(totalRevenue)} icon="wallet" color="#10b981" sub={`${monthRevenues.length} lançamento(s)`} />
+              <KpiCard label="Despesas" value={fmt(totalExpenses)} icon="tag" color="#f59e0b" sub={`${pct(totalExpenses, totalRevenue)}% da receita`} />
+              <KpiCard label="Saldo" value={fmt(balance)} icon="chart" color={balance >= 0 ? "#6366f1" : "#ef4444"} sub={balance >= 0 ? "✓ No azul" : "⚠ No vermelho"} />
+              <KpiCard label="Meta Economia" value={fmt(savingTarget)} icon="target" color="#ec4899" sub={`${savingGoal}% · ${balance >= savingTarget ? "✓ Atingida!" : "Faltam " + fmt(savingTarget - balance)}`} />
             </div>
 
             <div style={S.card}>
-              <div style={S.cardTitle}>Resumo do Mês</div>
-              <ProgressRow label="Pago" value={paidExpenses} total={monthRevenue} color="#10b981"/>
-              <ProgressRow label="Em Aberto" value={openExpenses} total={monthRevenue} color="#f59e0b"/>
-              <ProgressRow label="Meta Economia" value={savingTarget} total={monthRevenue} color="#ec4899"/>
-              <div style={S.divider}/>
-              <div style={S.progressSummary}><span>Receita total</span><strong>{fmt(monthRevenue)}</strong></div>
+              <div style={S.cardTitle}>Resumo Financeiro</div>
+              <ProgressRow label="Pago" value={paidExpenses} total={totalRevenue} color="#10b981" />
+              <ProgressRow label="Em Aberto" value={totalExpenses - paidExpenses} total={totalRevenue} color="#f59e0b" />
+              <ProgressRow label="Meta Economia" value={savingTarget} total={totalRevenue} color="#ec4899" />
+              <div style={S.divider} />
+              <div style={S.progressSummary}><span>Receita total</span><strong>{fmt(totalRevenue)}</strong></div>
             </div>
 
-            {alerts.length>0 && (
+            {alerts.length > 0 && (
               <div style={S.card}>
                 <div style={S.cardTitle}>⚠ Variações de Gasto</div>
-                {alerts.map((a,i)=>(
+                {alerts.map((a, i) => (
                   <div key={i} style={S.alertRow}>
-                    <Icon d={icons.warning} size={16} stroke="#f59e0b"/>
-                    <div style={S.alertContent}>
+                    <Icon d={ic.warning} size={16} stroke="#f59e0b" />
+                    <div style={{ flex: 1 }}>
                       <div style={S.alertDesc}>{a.desc}</div>
                       <div style={S.alertValues}>{fmt(a.prev)} → {fmt(a.curr)}</div>
                     </div>
@@ -283,158 +423,231 @@ export default function App() {
               </div>
             )}
 
-            <div style={S.card}>
-              <div style={S.cardTitle}>Despesas por Grupo</div>
-              {byGroup.map(g=>(
-                <div key={g.id} style={S.groupSummaryRow}>
-                  <div style={{...S.dot,background:g.color}}/>
-                  <span style={S.groupSummaryName}>{g.name}</span>
-                  <div style={S.groupBarWrap}><div style={{...S.groupBar,width:`${pct(g.total,totalExpenses)}%`,background:g.color}}/></div>
-                  <span style={S.groupSummaryValue}>{fmt(g.total)}</span>
+            {/* Pie Chart */}
+            {byGroup.length > 0 && (
+              <div style={S.card}>
+                <div style={S.cardTitle}>Distribuição por Grupo</div>
+                <div style={{ display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" }}>
+                  <PieChart data={pieData} />
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, minWidth: 160 }}>
+                    {pieData.map(g => (
+                      <div key={g.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: 3, background: g.color, flexShrink: 0 }} />
+                        <span style={{ fontSize: 12, color: "#475569", flex: 1 }}>{g.name}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: g.color }}>{g.pct}%</span>
+                        <span style={{ fontSize: 11, color: "#94a3b8" }}>{fmt(g.total)}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
-              {byGroup.length===0 && <div style={S.empty}>Nenhuma despesa lançada</div>}
-            </div>
-
-            {showRevenueForm && <Modal onClose={()=>setShowRevenueForm(false)} title="Lançar Receita">
-              <RevenueForm revenues={revenues.filter(r=>r.month===selMonth&&r.year===selYear)} onSave={saveRevenue} onClose={()=>setShowRevenueForm(false)}/>
-            </Modal>}
-          </div>
-        )}
-
-        {/* EXPENSES */}
-        {activeTab==="expenses" && (
-          <div style={S.section}>
-            <div style={S.rowBetween}>
-              <button style={S.btnPrimary} onClick={()=>{setEditItem(null);setShowForm(true);}}>
-                <Icon d={icons.plus} size={14}/> Nova Despesa
-              </button>
-              <button style={S.btnSecondary} onClick={()=>setShowGroupForm(true)}>
-                <Icon d={icons.plus} size={14}/> Novo Grupo
-              </button>
-            </div>
-
-            {groups.map(g=>{
-              const items=monthExpenses.filter(e=>e.groupId===g.id);
-              if(items.length===0) return null;
-              return <GroupSection key={g.id} group={g} items={items} total={items.reduce((s,e)=>s+e.value,0)}
-                onToggle={togglePaid} onEdit={item=>{setEditItem(item);setShowForm(true);}} onDelete={deleteExpense}/>;
-            })}
-
-            {monthExpenses.length===0 && (
-              <div style={S.emptyState}>
-                <div style={{fontSize:48}}>📂</div>
-                <div style={{color:"#64748b",fontSize:14}}>Nenhuma despesa para {MONTHS_FULL[selMonth]}</div>
-                <button style={S.btnPrimary} onClick={()=>setShowForm(true)}>Adicionar primeira despesa</button>
               </div>
             )}
 
-            {showForm && <Modal onClose={()=>{setShowForm(false);setEditItem(null);}} title={editItem?"Editar Despesa":"Nova Despesa"}>
-              <ExpenseForm groups={groups} item={editItem} selMonth={selMonth} selYear={selYear} onSave={saveExpense} onClose={()=>{setShowForm(false);setEditItem(null);}}/>
-            </Modal>}
-
-            {showGroupForm && <Modal onClose={()=>setShowGroupForm(false)} title="Novo Grupo">
-              <GroupForm onSave={addGroup} onClose={()=>setShowGroupForm(false)}/>
-            </Modal>}
-          </div>
-        )}
-
-        {/* COFRINHO */}
-        {activeTab==="piggy" && (
-          <div style={S.section}>
-            <div style={S.piggyHero}>
-              <div style={{fontSize:56}}>🐷</div>
-              <div style={S.piggyBalance}>{fmt(piggy.balance||0)}</div>
-              <div style={S.piggyLabel}>Reserva de Emergência</div>
-              <div style={{color:"#64748b",fontSize:12}}>Meta: {fmt(piggy.goal||10000)}</div>
-              <div style={S.piggyProgressWrap}>
-                <div style={{...S.piggyProgress,width:`${Math.min(100,pct(piggy.balance||0,piggy.goal||10000))}%`}}/>
-              </div>
-              <div style={{fontSize:12,color:"#94a3b8"}}>{pct(piggy.balance||0,piggy.goal||10000)}% da meta atingida</div>
-            </div>
-
-            <button style={{...S.btnPrimary,justifyContent:"center"}} onClick={()=>setShowPiggyForm(true)}>
-              <Icon d={icons.coin} size={16}/> Depositar no Cofrinho
-            </button>
-
             <div style={S.card}>
-              <div style={S.cardTitle}>🎯 Meta de Economia Mensal</div>
-              <div style={S.savingBlock}>
-                <div style={S.savingPercent}>{savingGoal}%</div>
-                <div style={{fontSize:13,color:"#475569",lineHeight:1.8}}>
-                  <div>Meta: <strong>{fmt(savingTarget)}</strong>/mês</div>
-                  <div>Saldo: <strong style={{color:balance>=savingTarget?"#10b981":"#ef4444"}}>{fmt(balance)}</strong></div>
-                  <div style={{color:balance>=savingTarget?"#10b981":"#ef4444",fontWeight:600,marginTop:6}}>
-                    {balance>=savingTarget?"✓ Meta atingida!":`⚠ Faltam ${fmt(savingTarget-balance)}`}
+              <div style={S.cardTitle}>Despesas por Grupo</div>
+              {byGroup.map(g => (
+                <div key={g.id} style={S.groupSummaryRow}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: g.color, flexShrink: 0 }} />
+                  <span style={{ fontSize: 13, color: "#475569", width: 120, flexShrink: 0 }}>{g.name}</span>
+                  <div style={{ flex: 1, height: 6, background: "#f1f5f9", borderRadius: 99 }}>
+                    <div style={{ width: `${pct(g.total, totalExpenses)}%`, height: "100%", borderRadius: 99, background: g.color, transition: "width .5s ease" }} />
                   </div>
-                </div>
-              </div>
-              <input type="range" min={5} max={50} value={savingGoal} onChange={e=>saveSavingGoal(+e.target.value)} style={S.range}/>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#94a3b8"}}><span>5%</span><span>50%</span></div>
-            </div>
-
-            <div style={S.card}>
-              <div style={S.cardTitle}>Histórico de Depósitos</div>
-              {(piggy.deposits||[]).length===0 && <div style={S.empty}>Nenhum depósito ainda</div>}
-              {(piggy.deposits||[]).map((d,i)=>(
-                <div key={i} style={S.depositRow}>
-                  <div><div style={S.depositNote}>{d.note}</div><div style={S.depositDate}>{d.date}</div></div>
-                  <div style={S.depositValue}>+{fmt(d.value)}</div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#1e293b", width: 90, textAlign: "right" }}>{fmt(g.total)}</span>
                 </div>
               ))}
+              {byGroup.length === 0 && <div style={S.empty}>Nenhuma despesa lançada</div>}
             </div>
 
-            {showPiggyForm && <Modal onClose={()=>setShowPiggyForm(false)} title="Depositar no Cofrinho 🐷">
-              <PiggyForm onSave={addPiggyDeposit} onClose={()=>setShowPiggyForm(false)}/>
+            {/* Saving Goal Slider */}
+            <div style={S.card}>
+              <div style={S.cardTitle}>🎯 Meta de Economia</div>
+              <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 14 }}>
+                <div style={{ fontSize: 48, fontWeight: 900, color: "#6366f1", letterSpacing: -2, lineHeight: 1 }}>{savingGoal}%</div>
+                <div style={{ fontSize: 13, color: "#475569", lineHeight: 1.8 }}>
+                  <div>Meta: <strong>{fmt(savingTarget)}</strong>/mês</div>
+                  <div>Saldo atual: <strong style={{ color: balance >= savingTarget ? "#10b981" : "#ef4444" }}>{fmt(balance)}</strong></div>
+                  <div style={{ color: balance >= savingTarget ? "#10b981" : "#ef4444", fontWeight: 600 }}>
+                    {balance >= savingTarget ? "✓ Meta atingida!" : `Faltam ${fmt(savingTarget - balance)}`}
+                  </div>
+                </div>
+              </div>
+              <input type="range" min={5} max={50} value={savingGoal} onChange={e => saveSavingGoal(+e.target.value)} style={{ width: "100%" }} />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#94a3b8", marginTop: 4 }}><span>5%</span><span>50%</span></div>
+            </div>
+          </div>
+        )}
+
+        {/* ── EXPENSES ── */}
+        {activeTab === "expenses" && (
+          <div style={S.section}>
+            <div style={S.rowBetween}>
+              <button style={S.btnPrimary} onClick={() => { setEditItem(null); setShowForm(true); }}><Icon d={ic.plus} size={14} /> Nova Despesa</button>
+              <button style={S.btnSecondary} onClick={() => setShowGroupForm(true)}><Icon d={ic.plus} size={14} /> Grupo</button>
+            </div>
+            {groups.map(g => {
+              const items = monthExpenses.filter(e => e.groupId === g.id);
+              if (items.length === 0) return null;
+              return <GroupSection key={g.id} group={g} items={items} total={items.reduce((s, e) => s + (e.value || 0), 0)}
+                onToggle={togglePaid} onEdit={item => { setEditItem(item); setShowForm(true); }} onDelete={deleteExpense} />;
+            })}
+            {monthExpenses.length === 0 && (
+              <div style={S.emptyState}>
+                <div style={{ fontSize: 48 }}>📂</div>
+                <div style={{ color: "#64748b", fontSize: 14 }}>Nenhuma despesa em {MONTHS_FULL[selMonth]}</div>
+                <button style={S.btnPrimary} onClick={() => setShowForm(true)}>Adicionar primeira despesa</button>
+              </div>
+            )}
+            {showForm && <Modal onClose={() => { setShowForm(false); setEditItem(null); }} title={editItem ? "Editar Despesa" : "Nova Despesa"}>
+              <ExpenseForm groups={groups} item={editItem} selMonth={selMonth} selYear={selYear} onSave={saveExpense} onClose={() => { setShowForm(false); setEditItem(null); }} />
+            </Modal>}
+            {showGroupForm && <Modal onClose={() => setShowGroupForm(false)} title="Novo Grupo de Despesa">
+              <GroupForm onSave={addGroup} onClose={() => setShowGroupForm(false)} />
             </Modal>}
           </div>
         )}
 
-        {/* HISTORY */}
-        {activeTab==="history" && (
+        {/* ── REVENUES ── */}
+        {activeTab === "revenues" && (
           <div style={S.section}>
+            <div style={S.rowBetween}>
+              <button style={S.btnPrimary} onClick={() => setShowRevForm(true)}><Icon d={ic.plus} size={14} /> Nova Receita</button>
+              <button style={S.btnSecondary} onClick={() => setShowRevGroupForm(true)}><Icon d={ic.plus} size={14} /> Categoria</button>
+            </div>
+
             <div style={S.card}>
-              <div style={S.cardTitle}>Evolução de Gastos — 12 Meses</div>
-              <div style={{display:"flex",gap:16,fontSize:12,color:"#64748b",marginBottom:16,alignItems:"center"}}>
-                <span style={{display:"inline-block",width:10,height:10,borderRadius:3,background:"#f59e0b",marginRight:4}}/> Despesas
-                <span style={{display:"inline-block",width:10,height:10,borderRadius:3,background:"#10b981",marginRight:4}}/> Receita
-              </div>
-              <div style={{display:"flex",gap:6,alignItems:"flex-end",height:160,borderBottom:"1px solid #f1f5f9"}}>
-                {history.map((h,i)=>(
-                  <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
-                    <div style={{flex:1,width:"100%",display:"flex",gap:2,alignItems:"flex-end"}}>
-                      <div style={{flex:1,minHeight:2,borderRadius:"3px 3px 0 0",height:`${pct(h.rev,maxHistory)}%`,background:"#10b981",opacity:0.7}}/>
-                      <div style={{flex:1,minHeight:2,borderRadius:"3px 3px 0 0",height:`${pct(h.total,maxHistory)}%`,background:"#f59e0b"}}/>
+              <div style={S.cardTitle}>Total do Mês</div>
+              <div style={{ fontSize: 32, fontWeight: 800, color: "#10b981", letterSpacing: -1 }}>{fmt(totalRevenue)}</div>
+              <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>{monthRevenues.length} lançamento(s) em {MONTHS_FULL[selMonth]}</div>
+            </div>
+
+            {revGroups.map(rg => {
+              const items = monthRevenues.filter(r => r.groupId === rg.id);
+              if (items.length === 0) return null;
+              const total = items.reduce((s, r) => s + (r.value || 0), 0);
+              return (
+                <div key={rg.id} style={S.groupCard}>
+                  <div style={S.groupHeader}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: "50%", background: rg.color }} />
+                      <span style={{ fontWeight: 700, fontSize: 14, color: "#1e293b" }}>{rg.name}</span>
                     </div>
-                    <div style={{fontSize:10,fontWeight:h.month===selMonth&&h.year===selYear?700:400,color:h.month===selMonth&&h.year===selYear?"#6366f1":"#94a3b8"}}>{h.label}</div>
+                    <span style={{ fontWeight: 700, fontSize: 14, color: "#10b981" }}>{fmt(total)}</span>
                   </div>
+                  {items.map(r => (
+                    <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: "1px solid #f8fafc" }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{r.description}</div>
+                        <div style={{ fontSize: 11, color: "#94a3b8" }}>{r.source || ""}{r.recurring ? " · recorrente" : ""}</div>
+                      </div>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: "#10b981" }}>{fmt(r.value)}</div>
+                      <button style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }} onClick={() => deleteRevenue(r.id)}><Icon d={ic.trash} size={13} stroke="#ef4444" /></button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+
+            {monthRevenues.length === 0 && (
+              <div style={S.emptyState}>
+                <div style={{ fontSize: 48 }}>💰</div>
+                <div style={{ color: "#64748b", fontSize: 14 }}>Nenhuma receita em {MONTHS_FULL[selMonth]}</div>
+                <button style={S.btnPrimary} onClick={() => setShowRevForm(true)}>Lançar primeira receita</button>
+              </div>
+            )}
+
+            {showRevForm && <Modal onClose={() => setShowRevForm(false)} title="Nova Receita">
+              <RevenueForm revGroups={revGroups} selMonth={selMonth} selYear={selYear} onSave={saveRevenue} onClose={() => setShowRevForm(false)} />
+            </Modal>}
+            {showRevGroupForm && <Modal onClose={() => setShowRevGroupForm(false)} title="Nova Categoria de Receita">
+              <GroupForm onSave={addRevGroup} onClose={() => setShowRevGroupForm(false)} />
+            </Modal>}
+          </div>
+        )}
+
+        {/* ── GOALS / COFRINHO ── */}
+        {activeTab === "goals" && (
+          <div style={S.section}>
+            <button style={{ ...S.btnPrimary, justifyContent: "center" }} onClick={() => { setEditGoal(null); setShowGoalForm(true); }}>
+              <Icon d={ic.plus} size={14} /> Nova Meta 🎯
+            </button>
+
+            {goals.length === 0 && (
+              <div style={S.emptyState}>
+                <div style={{ fontSize: 48 }}>🐷</div>
+                <div style={{ color: "#64748b", fontSize: 14 }}>Crie sua primeira meta de economia!</div>
+                <div style={{ fontSize: 12, color: "#94a3b8", textAlign: "center" }}>Ex: Geladeira nova, viagem de férias, fundo de emergência...</div>
+              </div>
+            )}
+
+            {goals.map(goal => <GoalCard key={goal.id} goal={goal} onDeposit={depositGoal} onEdit={g => { setEditGoal(g); setShowGoalForm(true); }} onDelete={deleteGoal} />)}
+
+            {showGoalForm && <Modal onClose={() => { setShowGoalForm(false); setEditGoal(null); }} title={editGoal ? "Editar Meta" : "Nova Meta 🎯"}>
+              <GoalForm item={editGoal} onSave={saveGoal} onClose={() => { setShowGoalForm(false); setEditGoal(null); }} />
+            </Modal>}
+          </div>
+        )}
+
+        {/* ── HISTORY ── */}
+        {activeTab === "history" && (
+          <div style={S.section}>
+            {/* Filter */}
+            <div style={S.card}>
+              <div style={S.cardTitle}><Icon d={ic.filter} size={14} /> Filtrar por Grupo</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button style={{ ...S.filterBtn, ...(histFilter === "all" ? S.filterBtnActive : {}) }} onClick={() => setHistFilter("all")}>Todos</button>
+                {groups.map(g => (
+                  <button key={g.id} style={{ ...S.filterBtn, ...(histFilter === g.id ? { background: g.color, color: "#fff", borderColor: g.color } : {}) }} onClick={() => setHistFilter(g.id)}>{g.name}</button>
                 ))}
               </div>
             </div>
 
             <div style={S.card}>
+              <div style={S.cardTitle}>Evolução — 12 Meses {histFilter !== "all" ? `· ${groups.find(g => g.id === histFilter)?.name}` : ""}</div>
+              <div style={{ display: "flex", gap: 16, fontSize: 12, color: "#64748b", marginBottom: 16, alignItems: "center" }}>
+                <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, background: "#f59e0b", marginRight: 4 }} />Despesas</span>
+                {histFilter === "all" && <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 3, background: "#10b981", marginRight: 4 }} />Receita</span>}
+              </div>
+              <div style={{ display: "flex", gap: 4, alignItems: "flex-end", height: 160, borderBottom: "1px solid #f1f5f9" }}>
+                {filteredHistory.map((h, i) => {
+                  const maxH = Math.max(...filteredHistory.map(x => Math.max(x.total, x.rev)), 1);
+                  return (
+                    <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                      <div style={{ flex: 1, width: "100%", display: "flex", gap: 2, alignItems: "flex-end" }}>
+                        {histFilter === "all" && <div style={{ flex: 1, minHeight: 2, borderRadius: "3px 3px 0 0", height: `${pct(h.rev, maxH)}%`, background: "#10b981", opacity: 0.7 }} />}
+                        <div style={{ flex: 1, minHeight: 2, borderRadius: "3px 3px 0 0", height: `${pct(h.total, maxH)}%`, background: histFilter !== "all" ? (groups.find(g => g.id === histFilter)?.color || "#f59e0b") : "#f59e0b" }} />
+                      </div>
+                      <div style={{ fontSize: 9, fontWeight: h.month === selMonth && h.year === selYear ? 700 : 400, color: h.month === selMonth && h.year === selYear ? "#6366f1" : "#94a3b8" }}>{h.label}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={S.card}>
               <div style={S.cardTitle}>Detalhe por Mês</div>
-              <table style={{width:"100%",borderCollapse:"collapse"}}>
-                <thead>
-                  <tr>{["Mês","Receita","Despesas","Saldo","Var.%"].map(h=><th key={h} style={{fontSize:11,color:"#94a3b8",fontWeight:600,textAlign:"left",padding:"6px 8px",borderBottom:"1px solid #f1f5f9"}}>{h}</th>)}</tr>
-                </thead>
-                <tbody>
-                  {history.map((h,i)=>{
-                    const prev=history[i-1];
-                    const varPct=prev&&prev.total>0?Math.round(((h.total-prev.total)/prev.total)*100):null;
-                    const bal=h.rev-h.total;
-                    return (
-                      <tr key={i} style={{background:h.month===selMonth&&h.year===selYear?"rgba(99,102,241,0.08)":"transparent"}}>
-                        <td style={{fontSize:12,padding:"8px 8px",borderBottom:"1px solid #f8fafc",color:"#475569"}}>{h.label}/{h.year}</td>
-                        <td style={{fontSize:12,padding:"8px 8px",color:"#10b981"}}>{fmt(h.rev)}</td>
-                        <td style={{fontSize:12,padding:"8px 8px",color:"#f59e0b"}}>{fmt(h.total)}</td>
-                        <td style={{fontSize:12,padding:"8px 8px",color:bal>=0?"#10b981":"#ef4444"}}>{fmt(bal)}</td>
-                        <td style={{fontSize:12,padding:"8px 8px"}}>{varPct!==null?<span style={{color:varPct>15?"#ef4444":varPct>0?"#f59e0b":"#10b981",fontWeight:600}}>{varPct>0?"+":""}{varPct}%</span>:"—"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 400 }}>
+                  <thead>
+                    <tr>{["Mês", "Receita", "Despesas", "Saldo", "Var.%"].map(h => <th key={h} style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, textAlign: "left", padding: "6px 8px", borderBottom: "1px solid #f1f5f9" }}>{h}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {filteredHistory.map((h, i) => {
+                      const prev = filteredHistory[i - 1];
+                      const varPct = prev && prev.total > 0 ? Math.round(((h.total - prev.total) / prev.total) * 100) : null;
+                      const bal = h.rev - h.total;
+                      return (
+                        <tr key={i} style={{ background: h.month === selMonth && h.year === selYear ? "rgba(99,102,241,0.08)" : "transparent" }}>
+                          <td style={{ fontSize: 12, padding: "8px", color: "#475569" }}>{h.label}/{h.year}</td>
+                          <td style={{ fontSize: 12, padding: "8px", color: "#10b981", fontWeight: 600 }}>{fmt(h.rev)}</td>
+                          <td style={{ fontSize: 12, padding: "8px", color: "#f59e0b", fontWeight: 600 }}>{fmt(h.total)}</td>
+                          <td style={{ fontSize: 12, padding: "8px", color: bal >= 0 ? "#10b981" : "#ef4444", fontWeight: 600 }}>{fmt(bal)}</td>
+                          <td style={{ fontSize: 12, padding: "8px" }}>{varPct !== null ? <span style={{ color: varPct > 15 ? "#ef4444" : varPct > 0 ? "#f59e0b" : "#10b981", fontWeight: 700 }}>{varPct > 0 ? "+" : ""}{varPct}%</span> : "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -443,88 +656,175 @@ export default function App() {
   );
 }
 
-// ─── Components ───────────────────────────────────────────────────────────────
-function KpiCard({label,value,icon,color,sub}) {
+// ─── PIE CHART ────────────────────────────────────────────────────────────────
+function PieChart({ data }) {
+  const size = 140; const r = 54; const cx = 70; const cy = 70;
+  const toRad = deg => (deg - 90) * Math.PI / 180;
+  const arc = (start, slice) => {
+    if (slice >= 360) return `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx - 0.01} ${cy - r} Z`;
+    const s = toRad(start); const e = toRad(start + slice);
+    const x1 = cx + r * Math.cos(s); const y1 = cy + r * Math.sin(s);
+    const x2 = cx + r * Math.cos(e); const y2 = cy + r * Math.sin(e);
+    const large = slice > 180 ? 1 : 0;
+    return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`;
+  };
   return (
-    <div style={{...S.kpiCard,borderTop:`3px solid ${color}`}}>
-      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-        <div style={{width:36,height:36,borderRadius:10,background:color+"22",display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <Icon d={icons[icon]} size={18} stroke={color}/>
+    <svg width={size} height={size} style={{ flexShrink: 0 }}>
+      {data.map((d, i) => <path key={i} d={arc(d.start, d.slice)} fill={d.color} stroke="#fff" strokeWidth={2} />)}
+      <circle cx={cx} cy={cy} r={34} fill="#fff" />
+      <text x={cx} y={cy - 5} textAnchor="middle" fontSize={10} fill="#64748b">Total</text>
+      <text x={cx} y={cy + 10} textAnchor="middle" fontSize={9} fontWeight="bold" fill="#1e293b">{data.reduce((s, d) => s + d.total, 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })}</text>
+    </svg>
+  );
+}
+
+// ─── GOAL CARD ────────────────────────────────────────────────────────────────
+function GoalCard({ goal, onDeposit, onEdit, onDelete }) {
+  const [showDeposit, setShowDeposit] = useState(false);
+  const [depValue, setDepValue] = useState("");
+  const [depNote, setDepNote] = useState("Depósito");
+  const saved = goal.saved || 0;
+  const progress = pct(saved, goal.target);
+  const EMOJIS = { emergencia: "🛡️", viagem: "✈️", eletrodomestico: "🏠", carro: "🚗", educacao: "📚", outro: "🎯" };
+  const emoji = EMOJIS[goal.type] || "🎯";
+  return (
+    <div style={S.goalCard}>
+      <div style={S.goalHeader}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ fontSize: 32 }}>{emoji}</div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 15, color: "#1e293b" }}>{goal.name}</div>
+            <div style={{ fontSize: 11, color: "#94a3b8" }}>{goal.description || ""}</div>
+          </div>
         </div>
-        <div style={{fontSize:11,color:"#64748b",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5}}>{label}</div>
+        <div style={{ display: "flex", gap: 4 }}>
+          <button style={S.iconBtn} onClick={() => onEdit(goal)}><Icon d={ic.edit} size={13} stroke="#6366f1" /></button>
+          <button style={S.iconBtn} onClick={() => onDelete(goal.id)}><Icon d={ic.trash} size={13} stroke="#ef4444" /></button>
+        </div>
       </div>
-      <div style={{fontSize:20,fontWeight:800,letterSpacing:-0.5,color,marginBottom:4}}>{value}</div>
-      {sub && <div style={{fontSize:11,color:"#94a3b8"}}>{sub}</div>}
+      <div style={S.goalProgress}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+          <span style={{ fontSize: 12, color: "#64748b" }}>Economizado</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#1e293b" }}>{fmt(saved)} / {fmt(goal.target)}</span>
+        </div>
+        <div style={{ height: 10, background: "#f1f5f9", borderRadius: 99, overflow: "hidden" }}>
+          <div style={{ width: `${progress}%`, height: "100%", background: progress >= 100 ? "#10b981" : "linear-gradient(90deg,#6366f1,#ec4899)", borderRadius: 99, transition: "width .6s ease" }} />
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+          <span style={{ fontSize: 11, color: progress >= 100 ? "#10b981" : "#6366f1", fontWeight: 700 }}>{progress}% {progress >= 100 ? "✓ Concluída!" : ""}</span>
+          {goal.deadline && <span style={{ fontSize: 11, color: "#94a3b8" }}>Prazo: {goal.deadline}</span>}
+        </div>
+      </div>
+      {!showDeposit ? (
+        <button style={{ ...S.btnPrimary, justifyContent: "center", marginTop: 8 }} onClick={() => setShowDeposit(true)}>
+          <Icon d={ic.coin} size={14} /> Depositar
+        </button>
+      ) : (
+        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+          <input style={S.input} type="number" value={depValue} onChange={e => setDepValue(e.target.value)} placeholder="Valor (R$)" />
+          <input style={S.input} value={depNote} onChange={e => setDepNote(e.target.value)} placeholder="Observação" />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={S.btnSecondary} onClick={() => setShowDeposit(false)}>Cancelar</button>
+            <button style={S.btnPrimary} onClick={() => { if (depValue) { onDeposit(goal, parseFloat(depValue), depNote); setShowDeposit(false); setDepValue(""); } }}>Confirmar</button>
+          </div>
+        </div>
+      )}
+      {(goal.deposits || []).length > 0 && (
+        <div style={{ marginTop: 12, borderTop: "1px solid #f1f5f9", paddingTop: 10 }}>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6, fontWeight: 600 }}>ÚLTIMOS DEPÓSITOS</div>
+          {[...(goal.deposits || [])].reverse().slice(0, 3).map((d, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0" }}>
+              <span style={{ color: "#475569" }}>{d.note} · {d.date}</span>
+              <span style={{ fontWeight: 600, color: "#10b981" }}>+{fmt(d.value)}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function ProgressRow({label,value,total,color}) {
+// ─── SUB COMPONENTS ───────────────────────────────────────────────────────────
+function KpiCard({ label, value, icon, color, sub }) {
   return (
-    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-      <div style={{display:"flex",justifyContent:"space-between",fontSize:12,width:140,flexShrink:0,color:"#64748b"}}>
-        <span>{label}</span><span style={{color}}>{fmt(value)}</span>
+    <div style={{ ...S.kpiCard, borderTop: `3px solid ${color}` }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <div style={{ width: 34, height: 34, borderRadius: 10, background: color + "22", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Icon d={ic[icon]} size={16} stroke={color} />
+        </div>
+        <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</div>
       </div>
-      <div style={{flex:1,height:6,background:"#f1f5f9",borderRadius:99}}>
-        <div style={{width:`${Math.min(100,pct(value,total))}%`,height:"100%",borderRadius:99,background:color,transition:"width .5s ease"}}/>
-      </div>
-      <span style={{fontSize:11,color:"#94a3b8",width:32,textAlign:"right"}}>{pct(value,total)}%</span>
+      <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: -0.5, color, marginBottom: 4 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: "#94a3b8" }}>{sub}</div>}
     </div>
   );
 }
 
-function GroupSection({group,items,total,onToggle,onEdit,onDelete}) {
-  const [open,setOpen]=useState(true);
+function ProgressRow({ label, value, total, color }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, width: 130, flexShrink: 0, color: "#64748b" }}>
+        <span>{label}</span><span style={{ color }}>{fmt(value)}</span>
+      </div>
+      <div style={{ flex: 1, height: 6, background: "#f1f5f9", borderRadius: 99 }}>
+        <div style={{ width: `${pct(value, total)}%`, height: "100%", borderRadius: 99, background: color, transition: "width .5s ease" }} />
+      </div>
+      <span style={{ fontSize: 11, color: "#94a3b8", width: 32, textAlign: "right" }}>{pct(value, total)}%</span>
+    </div>
+  );
+}
+
+function GroupSection({ group, items, total, onToggle, onEdit, onDelete }) {
+  const [open, setOpen] = useState(true);
   return (
     <div style={S.groupCard}>
-      <div style={S.groupHeader} onClick={()=>setOpen(o=>!o)}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:10,height:10,borderRadius:"50%",background:group.color}}/>
-          <span style={{fontWeight:700,fontSize:14,color:"#1e293b"}}>{group.name}</span>
-          <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:99,background:group.color+"22",color:group.color}}>{items.length}</span>
+      <div style={S.groupHeader} onClick={() => setOpen(o => !o)}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: group.color }} />
+          <span style={{ fontWeight: 700, fontSize: 14, color: "#1e293b" }}>{group.name}</span>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: group.color + "22", color: group.color }}>{items.length}</span>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <span style={{fontWeight:700,fontSize:14,color:"#1e293b"}}>{fmt(total)}</span>
-          <Icon d={open?icons.chevron_down:icons.chevron_right} size={14} stroke="#94a3b8"/>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontWeight: 700, fontSize: 14, color: "#1e293b" }}>{fmt(total)}</span>
+          <Icon d={open ? ic.chevron_down : ic.chevron_right} size={14} stroke="#94a3b8" />
         </div>
       </div>
-      {open && <div>{items.map(item=><ExpenseRow key={item.id} item={item} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete}/>)}</div>}
+      {open && items.map(item => <ExpenseRow key={item.id} item={item} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} />)}
     </div>
   );
 }
 
-function ExpenseRow({item,onToggle,onEdit,onDelete}) {
-  const isOverdue=!item.paid&&item.dueDay<TODAY.getDate()&&item.month===CURRENT_MONTH&&item.year===CURRENT_YEAR;
+function ExpenseRow({ item, onToggle, onEdit, onDelete }) {
+  const isOverdue = !item.paid && item.dueDay < TODAY.getDate() && item.month === CURRENT_MONTH && item.year === CURRENT_YEAR;
   return (
-    <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:"1px solid #f8fafc",opacity:item.paid?0.65:1}}>
-      <button style={{width:22,height:22,borderRadius:6,border:`2px solid ${item.paid?"#10b981":"#cbd5e1"}`,background:item.paid?"#10b981":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
-        onClick={()=>onToggle(item.id)}>
-        {item.paid&&<Icon d={icons.check} size={11} stroke="#fff" strokeWidth={2.5}/>}
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", borderBottom: "1px solid #f8fafc", opacity: item.paid ? 0.65 : 1 }}>
+      <button style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${item.paid ? "#10b981" : "#cbd5e1"}`, background: item.paid ? "#10b981" : "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }} onClick={() => onToggle(item.id)}>
+        {item.paid && <Icon d={ic.check} size={11} stroke="#fff" strokeWidth={2.5} />}
       </button>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <span style={{fontSize:13,fontWeight:600,color:"#1e293b",textDecoration:item.paid?"line-through":"none",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{item.description}</span>
-          {item.recurring&&<span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:"#6366f1",background:"#ede9fe",padding:"2px 6px",borderRadius:99}}><Icon d={icons.repeat} size={10}/>recorrente</span>}
-          {isOverdue&&<span style={{fontSize:10,color:"#ef4444",background:"#fef2f2",padding:"2px 6px",borderRadius:99,fontWeight:700}}>vencido</span>}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: "#1e293b", textDecoration: item.paid ? "line-through" : "none" }}>{item.description}</span>
+          {item.recurring && <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10, color: "#6366f1", background: "#ede9fe", padding: "2px 6px", borderRadius: 99 }}><Icon d={ic.repeat} size={10} />recorrente</span>}
+          {isOverdue && <span style={{ fontSize: 10, color: "#ef4444", background: "#fef2f2", padding: "2px 6px", borderRadius: 99, fontWeight: 700 }}>vencido</span>}
         </div>
-        <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{item.creditor} · Vence dia {item.dueDay}</div>
+        <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{item.creditor}{item.dueDay ? ` · Vence dia ${item.dueDay}` : ""}</div>
       </div>
-      <div style={{fontWeight:700,fontSize:14,flexShrink:0,color:item.paid?"#10b981":isOverdue?"#ef4444":"#1e293b"}}>{fmt(item.value)}</div>
-      <div style={{display:"flex",gap:4,flexShrink:0}}>
-        <button style={{background:"none",border:"none",cursor:"pointer",padding:4,borderRadius:6}} onClick={()=>onEdit(item)}><Icon d={icons.edit} size={13} stroke="#6366f1"/></button>
-        <button style={{background:"none",border:"none",cursor:"pointer",padding:4,borderRadius:6}} onClick={()=>onDelete(item.id)}><Icon d={icons.trash} size={13} stroke="#ef4444"/></button>
+      <div style={{ fontWeight: 700, fontSize: 14, flexShrink: 0, color: item.paid ? "#10b981" : isOverdue ? "#ef4444" : "#1e293b" }}>{fmt(item.value)}</div>
+      <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+        <button style={S.iconBtn} onClick={() => onEdit(item)}><Icon d={ic.edit} size={13} stroke="#6366f1" /></button>
+        <button style={S.iconBtn} onClick={() => onDelete(item.id)}><Icon d={ic.trash} size={13} stroke="#ef4444" /></button>
       </div>
     </div>
   );
 }
 
-function Modal({onClose,title,children}) {
+function Modal({ onClose, title, children }) {
   return (
-    <div style={S.overlay} onClick={e=>e.target===e.currentTarget&&onClose()}>
+    <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={S.modal}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-          <span style={{fontWeight:700,fontSize:16,color:"#1e293b"}}>{title}</span>
-          <button style={{background:"#f1f5f9",border:"none",borderRadius:8,cursor:"pointer",padding:6,display:"flex",alignItems:"center"}} onClick={onClose}><Icon d={icons.x} size={16}/></button>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <span style={{ fontWeight: 700, fontSize: 16, color: "#1e293b" }}>{title}</span>
+          <button style={{ background: "#f1f5f9", border: "none", borderRadius: 8, cursor: "pointer", padding: 6, display: "flex", alignItems: "center" }} onClick={onClose}><Icon d={ic.x} size={16} /></button>
         </div>
         {children}
       </div>
@@ -532,174 +832,199 @@ function Modal({onClose,title,children}) {
   );
 }
 
-function ExpenseForm({groups,item,selMonth,selYear,onSave,onClose}) {
-  const [desc,setDesc]=useState(item?.description||"");
-  const [creditor,setCreditor]=useState(item?.creditor||"");
-  const [value,setValue]=useState(item?.value||"");
-  const [dueDay,setDueDay]=useState(item?.dueDay||TODAY.getDate());
-  const [groupId,setGroupId]=useState(item?.groupId||groups[0]?.id||"");
-  const [recurring,setRecurring]=useState(item?.recurring||false);
-  const [paid,setPaid]=useState(item?.paid||false);
-
+function ExpenseForm({ groups, item, selMonth, selYear, onSave, onClose }) {
+  const [desc, setDesc] = useState(item?.description || "");
+  const [creditor, setCreditor] = useState(item?.creditor || "");
+  const [value, setValue] = useState(item?.value || "");
+  const [dueDay, setDueDay] = useState(item?.dueDay || TODAY.getDate());
+  const [groupId, setGroupId] = useState(item?.groupId || groups[0]?.id || "");
+  const [recurring, setRecurring] = useState(item?.recurring || false);
+  const [recurMonths, setRecurMonths] = useState(item?.recurMonths || 12);
+  const [paid, setPaid] = useState(item?.paid || false);
   return (
     <div style={S.form}>
       <label style={S.label}>Grupo</label>
-      <select style={S.input} value={groupId} onChange={e=>setGroupId(e.target.value)}>
-        {groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}
+      <select style={S.input} value={groupId} onChange={e => setGroupId(e.target.value)}>
+        {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
       </select>
       <label style={S.label}>Descrição *</label>
-      <input style={S.input} value={desc} onChange={e=>setDesc(e.target.value)} placeholder="ex: Conta de energia"/>
+      <input style={S.input} value={desc} onChange={e => setDesc(e.target.value)} placeholder="ex: Conta de energia" />
       <label style={S.label}>Credor</label>
-      <input style={S.input} value={creditor} onChange={e=>setCreditor(e.target.value)} placeholder="ex: CEMIG"/>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-        <div>
-          <label style={S.label}>Valor (R$) *</label>
-          <input style={S.input} type="number" value={value} onChange={e=>setValue(e.target.value)} placeholder="0,00"/>
-        </div>
-        <div>
-          <label style={S.label}>Dia Vencimento</label>
-          <input style={S.input} type="number" min={1} max={31} value={dueDay} onChange={e=>setDueDay(e.target.value)}/>
-        </div>
+      <input style={S.input} value={creditor} onChange={e => setCreditor(e.target.value)} placeholder="ex: CEMIG" />
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div><label style={S.label}>Valor (R$) *</label><input style={S.input} type="number" value={value} onChange={e => setValue(e.target.value)} placeholder="0,00" /></div>
+        <div><label style={S.label}>Dia Vencimento</label><input style={S.input} type="number" min={1} max={31} value={dueDay} onChange={e => setDueDay(e.target.value)} /></div>
       </div>
-      <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"#475569",cursor:"pointer"}}>
-          <input type="checkbox" checked={recurring} onChange={e=>setRecurring(e.target.checked)}/>
-          <Icon d={icons.repeat} size={14} stroke="#6366f1"/> Lançar como recorrente (12 meses)
-        </label>
-        <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"#475569",cursor:"pointer"}}>
-          <input type="checkbox" checked={paid} onChange={e=>setPaid(e.target.checked)}/>
-          <Icon d={icons.check} size={14} stroke="#10b981"/> Já está pago
-        </label>
-      </div>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#475569", cursor: "pointer" }}>
+        <input type="checkbox" checked={recurring} onChange={e => setRecurring(e.target.checked)} />
+        <Icon d={ic.repeat} size={14} stroke="#6366f1" /> Lançar como recorrente
+      </label>
+      {recurring && (
+        <div>
+          <label style={S.label}>Repetir por quantos meses?</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <input type="range" min={1} max={24} value={recurMonths} onChange={e => setRecurMonths(+e.target.value)} style={{ flex: 1 }} />
+            <span style={{ fontWeight: 700, color: "#6366f1", minWidth: 60 }}>{recurMonths} {recurMonths === 1 ? "mês" : "meses"}</span>
+          </div>
+        </div>
+      )}
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#475569", cursor: "pointer" }}>
+        <input type="checkbox" checked={paid} onChange={e => setPaid(e.target.checked)} />
+        <Icon d={ic.check} size={14} stroke="#10b981" /> Já está pago
+      </label>
       <div style={S.formActions}>
         <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
-        <button style={S.btnPrimary} onClick={()=>desc&&value&&onSave({...(item||{}),description:desc,creditor,value:parseFloat(value),dueDay:parseInt(dueDay),groupId,recurring,paid,month:item?.month??selMonth,year:item?.year??selYear})}>Salvar</button>
+        <button style={S.btnPrimary} onClick={() => desc && value && onSave({ ...(item || {}), description: desc, creditor, value: parseFloat(value), dueDay: parseInt(dueDay), groupId, recurring, recurMonths, paid, month: item?.month ?? selMonth, year: item?.year ?? selYear })}>Salvar</button>
       </div>
     </div>
   );
 }
 
-function GroupForm({onSave,onClose}) {
-  const [name,setName]=useState("");
-  const [color,setColor]=useState("#6366f1");
-  const [icon,setIcon]=useState("tag");
-  const ICONS=["home","car","heart","bolt","wallet","tag","piggy","chart"];
+function RevenueForm({ revGroups, selMonth, selYear, onSave, onClose }) {
+  const [desc, setDesc] = useState("");
+  const [source, setSource] = useState("");
+  const [value, setValue] = useState("");
+  const [groupId, setGroupId] = useState(revGroups[0]?.id || "");
+  const [recurring, setRecurring] = useState(false);
+  const [recurMonths, setRecurMonths] = useState(12);
+  return (
+    <div style={S.form}>
+      <label style={S.label}>Categoria</label>
+      <select style={S.input} value={groupId} onChange={e => setGroupId(e.target.value)}>
+        {revGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+      </select>
+      <label style={S.label}>Descrição *</label>
+      <input style={S.input} value={desc} onChange={e => setDesc(e.target.value)} placeholder="ex: Salário Março" />
+      <label style={S.label}>Fonte</label>
+      <input style={S.input} value={source} onChange={e => setSource(e.target.value)} placeholder="ex: Empresa XYZ" />
+      <label style={S.label}>Valor (R$) *</label>
+      <input style={S.input} type="number" value={value} onChange={e => setValue(e.target.value)} placeholder="0,00" />
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#475569", cursor: "pointer" }}>
+        <input type="checkbox" checked={recurring} onChange={e => setRecurring(e.target.checked)} />
+        <Icon d={ic.repeat} size={14} stroke="#10b981" /> Lançar como recorrente
+      </label>
+      {recurring && (
+        <div>
+          <label style={S.label}>Repetir por quantos meses?</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <input type="range" min={1} max={24} value={recurMonths} onChange={e => setRecurMonths(+e.target.value)} style={{ flex: 1 }} />
+            <span style={{ fontWeight: 700, color: "#10b981", minWidth: 60 }}>{recurMonths} {recurMonths === 1 ? "mês" : "meses"}</span>
+          </div>
+        </div>
+      )}
+      <div style={S.formActions}>
+        <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
+        <button style={S.btnPrimary} onClick={() => desc && value && onSave({ description: desc, source, value: parseFloat(value), groupId, recurring, recurMonths, month: selMonth, year: selYear })}>Salvar</button>
+      </div>
+    </div>
+  );
+}
+
+function GroupForm({ onSave, onClose }) {
+  const [name, setName] = useState("");
+  const [color, setColor] = useState("#6366f1");
+  const [icon, setIcon] = useState("tag");
+  const ICONS = ["home", "car", "heart", "bolt", "wallet", "tag", "star", "chart", "coin", "piggy"];
   return (
     <div style={S.form}>
       <label style={S.label}>Nome *</label>
-      <input style={S.input} value={name} onChange={e=>setName(e.target.value)} placeholder="ex: Alimentação"/>
+      <input style={S.input} value={name} onChange={e => setName(e.target.value)} placeholder="ex: Alimentação" />
       <label style={S.label}>Cor</label>
-      <input type="color" value={color} onChange={e=>setColor(e.target.value)} style={{...S.input,padding:4,height:44,cursor:"pointer"}}/>
+      <input type="color" value={color} onChange={e => setColor(e.target.value)} style={{ ...S.input, padding: 4, height: 44, cursor: "pointer" }} />
       <label style={S.label}>Ícone</label>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        {ICONS.map(ic=>(
-          <button key={ic} onClick={()=>setIcon(ic)} style={{width:44,height:44,borderRadius:10,border:`2px solid ${icon===ic?color:"transparent"}`,background:icon===ic?color+"33":"#f1f5f9",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <Icon d={icons[ic]} size={18} stroke={icon===ic?color:"#64748b"}/>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {ICONS.map(ico => (
+          <button key={ico} onClick={() => setIcon(ico)} style={{ width: 44, height: 44, borderRadius: 10, border: `2px solid ${icon === ico ? color : "transparent"}`, background: icon === ico ? color + "33" : "#f1f5f9", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Icon d={ic[ico]} size={18} stroke={icon === ico ? color : "#64748b"} />
           </button>
         ))}
       </div>
       <div style={S.formActions}>
         <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
-        <button style={S.btnPrimary} onClick={()=>name&&onSave(name,icon,color)}>Criar Grupo</button>
+        <button style={S.btnPrimary} onClick={() => name && onSave(name, icon, color)}>Criar</button>
       </div>
     </div>
   );
 }
 
-function RevenueForm({revenues,onSave,onClose}) {
-  const [desc,setDesc]=useState(revenues[0]?.description||"Salário");
-  const [value,setValue]=useState(revenues[0]?.value||"");
+function GoalForm({ item, onSave, onClose }) {
+  const [name, setName] = useState(item?.name || "");
+  const [description, setDescription] = useState(item?.description || "");
+  const [target, setTarget] = useState(item?.target || "");
+  const [deadline, setDeadline] = useState(item?.deadline || "");
+  const [type, setType] = useState(item?.type || "outro");
+  const TYPES = [{ v: "emergencia", l: "🛡️ Emergência" }, { v: "viagem", l: "✈️ Viagem" }, { v: "eletrodomestico", l: "🏠 Eletrodoméstico" }, { v: "carro", l: "🚗 Carro" }, { v: "educacao", l: "📚 Educação" }, { v: "outro", l: "🎯 Outro" }];
   return (
     <div style={S.form}>
+      <label style={S.label}>Tipo de Meta</label>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {TYPES.map(t => (
+          <button key={t.v} onClick={() => setType(t.v)} style={{ padding: "6px 12px", borderRadius: 20, border: `2px solid ${type === t.v ? "#6366f1" : "#e2e8f0"}`, background: type === t.v ? "#ede9fe" : "#f8fafc", cursor: "pointer", fontSize: 12, fontWeight: type === t.v ? 700 : 400, color: type === t.v ? "#6366f1" : "#475569" }}>{t.l}</button>
+        ))}
+      </div>
+      <label style={S.label}>Nome da Meta *</label>
+      <input style={S.input} value={name} onChange={e => setName(e.target.value)} placeholder="ex: Geladeira nova" />
       <label style={S.label}>Descrição</label>
-      <input style={S.input} value={desc} onChange={e=>setDesc(e.target.value)} placeholder="ex: Salário"/>
-      <label style={S.label}>Valor (R$)</label>
-      <input style={S.input} type="number" value={value} onChange={e=>setValue(e.target.value)} placeholder="0,00"/>
-      {revenues.map((r,i)=><div key={i} style={{fontSize:12,color:"#64748b"}}>Lançado: {r.description} — {fmt(r.value)}</div>)}
+      <input style={S.input} value={description} onChange={e => setDescription(e.target.value)} placeholder="ex: Samsung frost free" />
+      <label style={S.label}>Valor Alvo (R$) *</label>
+      <input style={S.input} type="number" value={target} onChange={e => setTarget(e.target.value)} placeholder="0,00" />
+      <label style={S.label}>Prazo (opcional)</label>
+      <input style={S.input} type="date" value={deadline} onChange={e => setDeadline(e.target.value)} />
       <div style={S.formActions}>
         <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
-        <button style={S.btnPrimary} onClick={()=>value&&onSave(desc,parseFloat(value))}>Salvar</button>
+        <button style={S.btnPrimary} onClick={() => name && target && onSave({ ...(item || {}), name, description, target: parseFloat(target), deadline, type, saved: item?.saved || 0, deposits: item?.deposits || [] })}>Salvar Meta</button>
       </div>
     </div>
   );
 }
 
-function PiggyForm({onSave,onClose}) {
-  const [value,setValue]=useState("");
-  const [note,setNote]=useState("Reserva mensal");
-  return (
-    <div style={S.form}>
-      <label style={S.label}>Valor (R$)</label>
-      <input style={S.input} type="number" value={value} onChange={e=>setValue(e.target.value)} placeholder="0,00"/>
-      <label style={S.label}>Observação</label>
-      <input style={S.input} value={note} onChange={e=>setNote(e.target.value)}/>
-      <div style={S.formActions}>
-        <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
-        <button style={S.btnPrimary} onClick={()=>value&&onSave(parseFloat(value),note)}>Depositar 🐷</button>
-      </div>
-    </div>
-  );
-}
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── STYLES ───────────────────────────────────────────────────────────────────
 const S = {
-  app:{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"#f8fafc",minHeight:"100vh",color:"#1e293b"},
-  header:{background:"linear-gradient(135deg,#1e293b 0%,#0f172a 100%)",padding:"0 16px"},
-  headerInner:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 0"},
-  logo:{display:"flex",alignItems:"center",gap:12},
-  logoIcon:{fontSize:28,background:"linear-gradient(135deg,#6366f1,#ec4899)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"},
-  logoTitle:{color:"#fff",fontWeight:700,fontSize:18,letterSpacing:-0.5},
-  logoSub:{color:"#64748b",fontSize:11},
-  monthNav:{display:"flex",alignItems:"center",gap:12},
-  navBtn:{background:"rgba(255,255,255,0.1)",border:"none",color:"#fff",width:32,height:32,borderRadius:8,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"},
-  monthLabel:{color:"#fff",fontWeight:600,fontSize:14,minWidth:140,textAlign:"center"},
-  nav:{background:"#fff",borderBottom:"1px solid #e2e8f0",display:"flex",padding:"0 16px",gap:4},
-  tab:{display:"flex",alignItems:"center",gap:6,padding:"12px 16px",border:"none",background:"transparent",cursor:"pointer",color:"#64748b",fontSize:13,fontWeight:500,borderBottom:"2px solid transparent"},
-  tabActive:{color:"#6366f1",borderBottomColor:"#6366f1",fontWeight:700},
-  main:{padding:16,maxWidth:900,margin:"0 auto"},
-  section:{display:"flex",flexDirection:"column",gap:16},
-  kpiGrid:{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:12},
-  kpiCard:{background:"#fff",borderRadius:14,padding:16,boxShadow:"0 1px 3px rgba(0,0,0,.06)"},
-  card:{background:"#fff",borderRadius:14,padding:16,boxShadow:"0 1px 3px rgba(0,0,0,.06)"},
-  cardTitle:{fontWeight:700,fontSize:14,marginBottom:14,color:"#1e293b"},
-  divider:{height:1,background:"#f1f5f9",margin:"10px 0"},
-  progressSummary:{display:"flex",justifyContent:"space-between",fontSize:13,color:"#64748b"},
-  alertRow:{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid #f1f5f9"},
-  alertContent:{flex:1},
-  alertDesc:{fontSize:13,fontWeight:600,color:"#1e293b"},
-  alertValues:{fontSize:12,color:"#64748b"},
-  alertBadge:{background:"#fef9c3",color:"#b45309",fontWeight:700,fontSize:11,padding:"3px 8px",borderRadius:99},
-  groupSummaryRow:{display:"flex",alignItems:"center",gap:8,marginBottom:8},
-  dot:{width:8,height:8,borderRadius:"50%",flexShrink:0},
-  groupSummaryName:{fontSize:13,color:"#475569",width:120,flexShrink:0},
-  groupBarWrap:{flex:1,height:6,background:"#f1f5f9",borderRadius:99},
-  groupBar:{height:"100%",borderRadius:99,minWidth:2,transition:"width .5s ease"},
-  groupSummaryValue:{fontSize:13,fontWeight:600,color:"#1e293b",width:90,textAlign:"right"},
-  empty:{fontSize:13,color:"#94a3b8",textAlign:"center",padding:"16px 0"},
-  rowBetween:{display:"flex",gap:10},
-  btnPrimary:{display:"flex",alignItems:"center",gap:6,padding:"10px 16px",background:"linear-gradient(135deg,#6366f1,#818cf8)",color:"#fff",border:"none",borderRadius:10,cursor:"pointer",fontWeight:600,fontSize:13,flex:1},
-  btnSecondary:{display:"flex",alignItems:"center",gap:6,padding:"10px 16px",background:"#f1f5f9",color:"#475569",border:"none",borderRadius:10,cursor:"pointer",fontWeight:600,fontSize:13,flex:1},
-  linkBtn:{background:"none",border:"none",color:"#6366f1",cursor:"pointer",fontSize:11,padding:0},
-  groupCard:{background:"#fff",borderRadius:14,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,.06)"},
-  groupHeader:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",cursor:"pointer",background:"#fafafa",borderBottom:"1px solid #f1f5f9"},
-  emptyState:{display:"flex",flexDirection:"column",alignItems:"center",gap:16,padding:"48px 16px",background:"#fff",borderRadius:14},
-  overlay:{position:"fixed",inset:0,background:"rgba(15,23,42,.5)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:100,backdropFilter:"blur(2px)"},
-  modal:{background:"#fff",borderRadius:"20px 20px 0 0",padding:20,width:"100%",maxWidth:540,maxHeight:"90vh",overflowY:"auto"},
-  form:{display:"flex",flexDirection:"column",gap:10},
-  label:{fontSize:12,fontWeight:600,color:"#475569",marginBottom:2},
-  input:{width:"100%",padding:"10px 12px",border:"1.5px solid #e2e8f0",borderRadius:10,fontSize:14,color:"#1e293b",background:"#f8fafc",boxSizing:"border-box",outline:"none"},
-  formActions:{display:"flex",gap:10,marginTop:10},
-  piggyHero:{background:"linear-gradient(135deg,#1e293b,#0f172a)",borderRadius:20,padding:28,display:"flex",flexDirection:"column",alignItems:"center",gap:6,color:"#fff"},
-  piggyBalance:{fontSize:36,fontWeight:800,letterSpacing:-1},
-  piggyLabel:{color:"#94a3b8",fontSize:13},
-  piggyProgressWrap:{width:"100%",height:8,background:"rgba(255,255,255,.1)",borderRadius:99,overflow:"hidden",marginTop:8},
-  piggyProgress:{height:"100%",background:"linear-gradient(90deg,#6366f1,#ec4899)",borderRadius:99,transition:"width .8s ease"},
-  savingBlock:{display:"flex",gap:16,alignItems:"center",marginBottom:14},
-  savingPercent:{fontSize:48,fontWeight:900,color:"#6366f1",letterSpacing:-2,lineHeight:1},
-  range:{width:"100%",accentColor:"#6366f1"},
-  depositRow:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid #f1f5f9"},
-  depositNote:{fontSize:13,fontWeight:600,color:"#1e293b"},
-  depositDate:{fontSize:11,color:"#94a3b8"},
-  depositValue:{fontWeight:700,color:"#10b981",fontSize:14},
-  toast:{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",color:"#fff",padding:"10px 20px",borderRadius:10,fontWeight:600,fontSize:13,zIndex:200,boxShadow:"0 4px 20px rgba(0,0,0,.2)"},
+  app: { fontFamily: "'DM Sans','Segoe UI',sans-serif", background: "#f8fafc", minHeight: "100vh", color: "#1e293b" },
+  header: { background: "linear-gradient(135deg,#1e293b 0%,#0f172a 100%)", padding: "0 16px" },
+  headerInner: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0" },
+  logo: { display: "flex", alignItems: "center", gap: 10 },
+  logoCircle: { width: 42, height: 42, borderRadius: "50%", background: "linear-gradient(135deg,#6366f1,#ec4899)", display: "flex", alignItems: "center", justifyContent: "center" },
+  logoTitle: { color: "#fff", fontWeight: 700, fontSize: 16, letterSpacing: -0.5 },
+  logoSub: { color: "#64748b", fontSize: 11 },
+  monthNav: { display: "flex", alignItems: "center", gap: 8 },
+  navBtn: { background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", width: 28, height: 28, borderRadius: 8, cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" },
+  monthLabel: { color: "#fff", fontWeight: 600, fontSize: 13, minWidth: 70, textAlign: "center" },
+  logoutBtn: { background: "rgba(255,255,255,0.05)", border: "none", cursor: "pointer", padding: 8, borderRadius: 8, display: "flex", alignItems: "center" },
+  nav: { background: "#fff", borderBottom: "1px solid #e2e8f0", display: "flex", padding: "0 8px", gap: 0, overflowX: "auto" },
+  tab: { display: "flex", alignItems: "center", gap: 5, padding: "11px 12px", border: "none", background: "transparent", cursor: "pointer", color: "#64748b", fontSize: 12, fontWeight: 500, borderBottom: "2px solid transparent", whiteSpace: "nowrap", flexShrink: 0 },
+  tabActive: { color: "#6366f1", borderBottomColor: "#6366f1", fontWeight: 700 },
+  main: { padding: 16, maxWidth: 900, margin: "0 auto", paddingBottom: 40 },
+  section: { display: "flex", flexDirection: "column", gap: 14 },
+  kpiGrid: { display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 10 },
+  kpiCard: { background: "#fff", borderRadius: 14, padding: 14, boxShadow: "0 1px 3px rgba(0,0,0,.06)" },
+  card: { background: "#fff", borderRadius: 14, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,.06)" },
+  cardTitle: { fontWeight: 700, fontSize: 14, marginBottom: 14, color: "#1e293b", display: "flex", alignItems: "center", gap: 6 },
+  divider: { height: 1, background: "#f1f5f9", margin: "10px 0" },
+  progressSummary: { display: "flex", justifyContent: "space-between", fontSize: 13, color: "#64748b" },
+  alertRow: { display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid #f1f5f9" },
+  alertDesc: { fontSize: 13, fontWeight: 600, color: "#1e293b" },
+  alertValues: { fontSize: 12, color: "#64748b" },
+  alertBadge: { background: "#fef9c3", color: "#b45309", fontWeight: 700, fontSize: 11, padding: "3px 8px", borderRadius: 99 },
+  groupSummaryRow: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8 },
+  empty: { fontSize: 13, color: "#94a3b8", textAlign: "center", padding: "16px 0" },
+  rowBetween: { display: "flex", gap: 10 },
+  btnPrimary: { display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", background: "linear-gradient(135deg,#6366f1,#818cf8)", color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", fontWeight: 600, fontSize: 13, flex: 1 },
+  btnSecondary: { display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", background: "#f1f5f9", color: "#475569", border: "none", borderRadius: 10, cursor: "pointer", fontWeight: 600, fontSize: 13, flex: 1 },
+  groupCard: { background: "#fff", borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,.06)" },
+  groupHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", cursor: "pointer", background: "#fafafa", borderBottom: "1px solid #f1f5f9" },
+  emptyState: { display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: "48px 16px", background: "#fff", borderRadius: 14 },
+  overlay: { position: "fixed", inset: 0, background: "rgba(15,23,42,.6)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 100, backdropFilter: "blur(4px)" },
+  modal: { background: "#fff", borderRadius: "20px 20px 0 0", padding: 20, width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto" },
+  form: { display: "flex", flexDirection: "column", gap: 10 },
+  label: { fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 2 },
+  input: { width: "100%", padding: "10px 12px", border: "1.5px solid #e2e8f0", borderRadius: 10, fontSize: 14, color: "#1e293b", background: "#f8fafc", boxSizing: "border-box", outline: "none", fontFamily: "inherit" },
+  formActions: { display: "flex", gap: 10, marginTop: 8 },
+  iconBtn: { background: "none", border: "none", cursor: "pointer", padding: 6, borderRadius: 6, display: "flex", alignItems: "center" },
+  goalCard: { background: "#fff", borderRadius: 14, padding: 16, boxShadow: "0 1px 3px rgba(0,0,0,.06)" },
+  goalHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 },
+  goalProgress: { background: "#f8fafc", borderRadius: 10, padding: 12 },
+  filterBtn: { padding: "6px 14px", borderRadius: 20, border: "1.5px solid #e2e8f0", background: "#f8fafc", cursor: "pointer", fontSize: 12, fontWeight: 500, color: "#475569" },
+  filterBtnActive: { background: "#6366f1", color: "#fff", borderColor: "#6366f1", fontWeight: 700 },
+  toast: { position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", color: "#fff", padding: "10px 20px", borderRadius: 10, fontWeight: 600, fontSize: 13, zIndex: 200, boxShadow: "0 4px 20px rgba(0,0,0,.2)", animation: "toast-in .3s ease", whiteSpace: "nowrap" },
 };
