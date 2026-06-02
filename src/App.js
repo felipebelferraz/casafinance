@@ -217,8 +217,10 @@ function Dashboard({user}){
   const [showForm,setShowForm]=useState(false);
   const [editItem,setEditItem]=useState(null);
   const [showGroupForm,setShowGroupForm]=useState(false);
+  const [editGroup,setEditGroup]=useState(null);
   const [showRevForm,setShowRevForm]=useState(false);
   const [showRevGroupForm,setShowRevGroupForm]=useState(false);
+  const [editRevGroup,setEditRevGroup]=useState(null);
   const [showGoalForm,setShowGoalForm]=useState(false);
   const [editGoal,setEditGoal]=useState(null);
   const [showCardForm,setShowCardForm]=useState(false);
@@ -313,11 +315,17 @@ function Dashboard({user}){
     }
     setShowForm(false);setEditItem(null);
   };
-  const addGroup=async(name,icon,color)=>{
-    for(const g of groups){await setDoc(doc(db,`${base}/groups`,g.id),g);}
-    const id=`g_${Date.now()}`;
-    await setDoc(doc(db,`${base}/groups`,id),{id,name,icon,color});
-    setShowGroupForm(false);notify("Grupo criado!");
+  const saveGroup=async(name,icon,color,id)=>{
+    if(id){
+      await setDoc(doc(db,`${base}/groups`,id),{id,name,icon,color});
+      notify("Grupo atualizado!");
+    } else {
+      for(const g of groups){await setDoc(doc(db,`${base}/groups`,g.id),g);}
+      const newId=`g_${Date.now()}`;
+      await setDoc(doc(db,`${base}/groups`,newId),{id:newId,name,icon,color});
+      notify("Grupo criado!");
+    }
+    setShowGroupForm(false);setEditGroup(null);
   };
   const deleteGroup=async(id)=>{await deleteDoc(doc(db,`${base}/groups`,id));notify("Grupo removido");};
   const saveRevenue=async(data)=>{
@@ -342,11 +350,17 @@ function Dashboard({user}){
   };
   const toggleReceived=async(id)=>{const item=revenues.find(r=>r.id===id);await setDoc(doc(db,`${base}/revenues`,id),{...item,received:!item.received});};
   const deleteRevenue=async(id)=>{await deleteDoc(doc(db,`${base}/revenues`,id));notify("Receita removida");};
-  const addRevGroup=async(name,icon,color)=>{
-    for(const g of revGroups){await setDoc(doc(db,`${base}/revGroups`,g.id),g);}
-    const id=`rg_${Date.now()}`;
-    await setDoc(doc(db,`${base}/revGroups`,id),{id,name,icon,color});
-    setShowRevGroupForm(false);notify("Categoria criada!");
+  const saveRevGroup=async(name,icon,color,id)=>{
+    if(id){
+      await setDoc(doc(db,`${base}/revGroups`,id),{id,name,icon,color});
+      notify("Categoria atualizada!");
+    } else {
+      for(const g of revGroups){await setDoc(doc(db,`${base}/revGroups`,g.id),g);}
+      const newId=`rg_${Date.now()}`;
+      await setDoc(doc(db,`${base}/revGroups`,newId),{id:newId,name,icon,color});
+      notify("Categoria criada!");
+    }
+    setShowRevGroupForm(false);setEditRevGroup(null);
   };
   const saveGoal=async(data)=>{const id=data.id||`goal_${Date.now()}`;await setDoc(doc(db,`${base}/goals`,id),{...data,id});setShowGoalForm(false);setEditGoal(null);notify(data.id?"Meta atualizada!":"Meta criada! 🎯");};
   const depositGoal=async(goal,value,note)=>{const updated={...goal,saved:(goal.saved||0)+value,deposits:[...(goal.deposits||[]),{date:new Date().toISOString().slice(0,10),value,note}]};await setDoc(doc(db,`${base}/goals`,goal.id),updated);notify("Depósito realizado! 💰");};
@@ -560,11 +574,11 @@ function Dashboard({user}){
             {groups.map(g=>{
               const items=monthExpenses.filter(e=>e.groupId===g.id);
               if(items.length===0)return null;
-              return <GroupSection key={g.id} group={g} items={items} total={items.reduce((s,e)=>s+(e.value||0),0)} onToggle={togglePaid} onEdit={item=>{setEditItem(item);setShowForm(true);}} onDelete={deleteExpense} onDeleteGroup={deleteGroup}/>;
+              return <GroupSection key={g.id} group={g} items={items} total={items.reduce((s,e)=>s+(e.value||0),0)} onToggle={togglePaid} onEdit={item=>{setEditItem(item);setShowForm(true);}} onDelete={deleteExpense} onDeleteGroup={deleteGroup} onEditGroup={g=>{setEditGroup(g);setShowGroupForm(true);}}/>;
             })}
             {monthExpenses.length===0&&<div style={S.emptyState}><div style={{fontSize:48}}>📂</div><div style={{color:B.textMuted,fontSize:14}}>Nenhuma despesa em {MONTHS_FULL[selMonth]}</div><button style={S.btnPrimary} onClick={()=>setShowForm(true)}>Adicionar primeira despesa</button></div>}
             {showForm&&<Modal onClose={()=>{setShowForm(false);setEditItem(null);}} title={editItem?"Editar Despesa":"Nova Despesa"}><ExpenseForm groups={groups} item={editItem} selMonth={selMonth} selYear={selYear} onSave={saveExpense} onClose={()=>{setShowForm(false);setEditItem(null);}}/></Modal>}
-            {showGroupForm&&<Modal onClose={()=>setShowGroupForm(false)} title="Novo Grupo"><GroupForm onSave={addGroup} onClose={()=>setShowGroupForm(false)}/></Modal>}
+            {showGroupForm&&<Modal onClose={()=>{setShowGroupForm(false);setEditGroup(null);}} title={editGroup?"Editar Grupo":"Novo Grupo"}><GroupForm item={editGroup} onSave={saveGroup} onClose={()=>{setShowGroupForm(false);setEditGroup(null);}}/></Modal>}
           </div>
         )}
 
@@ -591,7 +605,10 @@ function Dashboard({user}){
                 <div key={rg.id} style={S.groupCard}>
                   <div style={S.groupHeader}>
                     <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:10,height:10,borderRadius:"50%",background:rg.color}}/><span style={{fontWeight:700,fontSize:14,color:B.navy}}>{rg.name}</span></div>
-                    <span style={{fontWeight:700,fontSize:14,color:B.green}}>{fmt(items.reduce((s,r)=>s+(r.value||0),0))}</span>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontWeight:700,fontSize:14,color:B.green}}>{fmt(items.reduce((s,r)=>s+(r.value||0),0))}</span>
+                      <button style={{...S.iconBtn,padding:2}} onClick={()=>{setEditRevGroup(rg);setShowRevGroupForm(true);}}><Icon d={ic.edit} size={12} stroke="#6366f1"/></button>
+                    </div>
                   </div>
                   {items.map(r=>(
                     <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:`1px solid ${B.bg}`,opacity:r.received?0.7:1}}>
@@ -615,7 +632,7 @@ function Dashboard({user}){
             })}
             {monthRevenues.length===0&&<div style={S.emptyState}><div style={{fontSize:48}}>💰</div><div style={{color:B.textMuted,fontSize:14}}>Nenhuma receita em {MONTHS_FULL[selMonth]}</div><button style={S.btnPrimary} onClick={()=>setShowRevForm(true)}>Lançar primeira receita</button></div>}
             {showRevForm&&<Modal onClose={()=>{setShowRevForm(false);setEditItem(null);}} title={editItem?"Editar Receita":"Nova Receita"}><RevenueForm revGroups={revGroups} item={editItem} selMonth={selMonth} selYear={selYear} onSave={saveRevenue} onClose={()=>{setShowRevForm(false);setEditItem(null);}}/></Modal>}
-            {showRevGroupForm&&<Modal onClose={()=>setShowRevGroupForm(false)} title="Nova Categoria"><GroupForm onSave={addRevGroup} onClose={()=>setShowRevGroupForm(false)}/></Modal>}
+            {showRevGroupForm&&<Modal onClose={()=>{setShowRevGroupForm(false);setEditRevGroup(null);}} title={editRevGroup?"Editar Categoria":"Nova Categoria"}><GroupForm item={editRevGroup} onSave={saveRevGroup} onClose={()=>{setShowRevGroupForm(false);setEditRevGroup(null);}}/></Modal>}
           </div>
         )}
 
@@ -636,34 +653,131 @@ function Dashboard({user}){
               <button style={S.btnPrimary} onClick={()=>{setEditCard(null);setShowCardForm(true);}}><Icon d={ic.plus} size={14}/> Novo Cartão</button>
               <button style={S.btnSecondary} onClick={()=>{setEditMiles(null);setShowMilesForm(true);}}><Icon d={ic.plus} size={14}/> Milhas</button>
             </div>
-            {cards.length>0&&(
-              <div style={S.card}>
-                <div style={S.cardTitle}><Icon d={ic.credit} size={14} stroke={B.green}/>Meus Cartões</div>
-                {cards.map(c=>{
-                  const used=c.used||0;const avail=(c.limit||0)-used;
-                  return(
-                    <div key={c.id} style={{marginBottom:12,background:`${c.color}11`,border:`1px solid ${c.color}33`,borderRadius:14,padding:16}}>
-                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
-                        <div><div style={{fontWeight:700,fontSize:15,color:B.navy}}>{c.name}</div><div style={{fontSize:11,color:B.textMuted}}>{c.bank||""}</div></div>
-                        <div style={{display:"flex",gap:4}}>
-                          <button style={S.iconBtn} onClick={()=>{setEditCard(c);setShowCardForm(true);}}><Icon d={ic.edit} size={13} stroke="#6366f1"/></button>
-                          <button style={S.iconBtn} onClick={()=>deleteCard(c.id)}><Icon d={ic.trash} size={13} stroke={B.danger}/></button>
+
+            {/* Resumo consolidado */}
+            {cards.length>0&&(()=>{
+              const totalLimit=cards.reduce((s,c)=>s+(c.limit||0),0);
+              const totalUsed=cards.reduce((s,c)=>s+(c.used||0),0);
+              const totalAvail=totalLimit-totalUsed;
+              const totalAnnual=cards.reduce((s,c)=>s+(c.annualFee||0),0);
+              const todayDay=TODAY.getDate();
+              const dueSoon=cards.filter(c=>c.dueDay&&Math.abs(c.dueDay-todayDay)<=5);
+              return(
+                <>
+                  {/* Alertas de vencimento */}
+                  {dueSoon.length>0&&(
+                    <div style={{background:"#fef9c3",border:"1px solid #fde68a",borderRadius:14,padding:14}}>
+                      <div style={{fontWeight:700,fontSize:13,color:"#92400e",marginBottom:8}}>⚠ Faturas próximas do vencimento</div>
+                      {dueSoon.map(c=>(
+                        <div key={c.id} style={{display:"flex",justifyContent:"space-between",fontSize:13,color:"#92400e",padding:"4px 0"}}>
+                          <span>💳 {c.name}</span>
+                          <span>Vence dia {c.dueDay} · {fmt(c.used||0)}</span>
                         </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Cards consolidado */}
+                  <div style={S.card}>
+                    <div style={S.cardTitle}><Icon d={ic.credit} size={14} stroke={B.green}/>Resumo Geral dos Cartões</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:16}}>
+                      <div style={{textAlign:"center",background:B.bg,borderRadius:12,padding:12,border:`1px solid ${B.border}`}}>
+                        <div style={{fontSize:10,color:B.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Limite Total</div>
+                        <div style={{fontWeight:800,fontSize:16,color:B.navy}}>{fmt(totalLimit)}</div>
                       </div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
-                        <div style={{textAlign:"center"}}><div style={{fontSize:10,color:B.textMuted}}>Total</div><div style={{fontWeight:700,fontSize:13,color:B.navy}}>{fmt(c.limit)}</div></div>
-                        <div style={{textAlign:"center"}}><div style={{fontSize:10,color:B.textMuted}}>Utilizado</div><div style={{fontWeight:700,fontSize:13,color:B.warning}}>{fmt(used)}</div></div>
-                        <div style={{textAlign:"center"}}><div style={{fontSize:10,color:B.textMuted}}>Disponível</div><div style={{fontWeight:700,fontSize:13,color:B.green}}>{fmt(avail)}</div></div>
+                      <div style={{textAlign:"center",background:B.bg,borderRadius:12,padding:12,border:`1px solid ${B.border}`}}>
+                        <div style={{fontSize:10,color:B.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Utilizado</div>
+                        <div style={{fontWeight:800,fontSize:16,color:B.warning}}>{fmt(totalUsed)}</div>
                       </div>
-                      <div style={{height:5,background:B.border,borderRadius:99,overflow:"hidden"}}>
-                        <div style={{width:`${pct(used,c.limit)}%`,height:"100%",background:c.color,borderRadius:99}}/>
+                      <div style={{textAlign:"center",background:B.bg,borderRadius:12,padding:12,border:`1px solid ${B.border}`}}>
+                        <div style={{fontSize:10,color:B.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Disponível</div>
+                        <div style={{fontWeight:800,fontSize:16,color:B.green}}>{fmt(totalAvail)}</div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+
+                    {/* Barra geral */}
+                    <div style={{marginBottom:8}}>
+                      <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:B.textMuted,marginBottom:4}}>
+                        <span>Utilização geral</span>
+                        <span style={{fontWeight:700,color:pct(totalUsed,totalLimit)>80?B.danger:B.warning}}>{pct(totalUsed,totalLimit)}%</span>
+                      </div>
+                      <div style={{height:8,background:B.border,borderRadius:99,overflow:"hidden"}}>
+                        <div style={{width:`${pct(totalUsed,totalLimit)}%`,height:"100%",background:pct(totalUsed,totalLimit)>80?B.danger:B.warning,borderRadius:99,transition:"width .5s"}}/>
+                      </div>
+                    </div>
+
+                    {/* Gráfico de barras por cartão */}
+                    <div style={{marginTop:16}}>
+                      <div style={{fontSize:11,color:B.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Utilização por Cartão</div>
+                      {cards.map(c=>{
+                        const used=c.used||0;const avail=(c.limit||0)-used;const p=pct(used,c.limit||1);
+                        return(
+                          <div key={c.id} style={{marginBottom:10}}>
+                            <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+                              <span style={{fontWeight:600,color:B.navy}}>{c.name}</span>
+                              <span style={{color:B.textMuted}}>{fmt(used)} / {fmt(c.limit)}</span>
+                            </div>
+                            <div style={{height:6,background:B.border,borderRadius:99,overflow:"hidden"}}>
+                              <div style={{width:`${p}%`,height:"100%",background:c.color,borderRadius:99,transition:"width .5s"}}/>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {totalAnnual>0&&(
+                      <div style={{marginTop:16,background:`${B.warning}18`,border:`1px solid ${B.warning}44`,borderRadius:10,padding:12}}>
+                        <div style={{fontSize:12,color:B.navy,fontWeight:700}}>💰 Custo total de anuidades/mensalidades</div>
+                        <div style={{fontSize:20,fontWeight:800,color:B.warning,marginTop:4}}>{fmt(totalAnnual)}<span style={{fontSize:11,color:B.textMuted,fontWeight:400}}>/ano</span></div>
+                        <div style={{fontSize:11,color:B.textMuted,marginTop:2}}>{fmt(totalAnnual/12)}/mês em média</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Lista de cartões */}
+                  <div style={S.card}>
+                    <div style={S.cardTitle}><Icon d={ic.credit} size={14} stroke={B.green}/>Meus Cartões</div>
+                    {cards.map(c=>{
+                      const used=c.used||0;const avail=(c.limit||0)-used;
+                      const dueDiff=c.dueDay?c.dueDay-todayDay:null;
+                      const isUrgent=dueDiff!==null&&dueDiff>=0&&dueDiff<=5;
+                      return(
+                        <div key={c.id} style={{marginBottom:12,background:`${c.color}0d`,border:`1.5px solid ${isUrgent?"#fde68a":c.color+"33"}`,borderRadius:14,padding:16}}>
+                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
+                            <div>
+                              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                                <div style={{width:10,height:10,borderRadius:"50%",background:c.color}}/>
+                                <span style={{fontWeight:700,fontSize:15,color:B.navy}}>{c.name}</span>
+                                {isUrgent&&<span style={{fontSize:10,background:"#fef9c3",color:"#92400e",padding:"2px 8px",borderRadius:99,fontWeight:700}}>⚠ Vence em {dueDiff===0?"hoje":`${dueDiff}d`}</span>}
+                              </div>
+                              <div style={{fontSize:11,color:B.textMuted,marginTop:2}}>{c.bank||""}{c.dueDay?` · Vence dia ${c.dueDay}`:""}</div>
+                              {c.annualFee>0&&<div style={{fontSize:11,color:B.warning,fontWeight:600,marginTop:2}}>Anuidade: {fmt(c.annualFee)}/ano</div>}
+                            </div>
+                            <div style={{display:"flex",gap:4}}>
+                              <button style={S.iconBtn} onClick={()=>{setEditCard(c);setShowCardForm(true);}}><Icon d={ic.edit} size={13} stroke="#6366f1"/></button>
+                              <button style={S.iconBtn} onClick={()=>deleteCard(c.id)}><Icon d={ic.trash} size={13} stroke={B.danger}/></button>
+                            </div>
+                          </div>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
+                            <div style={{textAlign:"center"}}><div style={{fontSize:10,color:B.textMuted}}>Total</div><div style={{fontWeight:700,fontSize:13,color:B.navy}}>{fmt(c.limit)}</div></div>
+                            <div style={{textAlign:"center"}}><div style={{fontSize:10,color:B.textMuted}}>Utilizado</div><div style={{fontWeight:700,fontSize:13,color:B.warning}}>{fmt(used)}</div></div>
+                            <div style={{textAlign:"center"}}><div style={{fontSize:10,color:B.textMuted}}>Disponível</div><div style={{fontWeight:700,fontSize:13,color:B.green}}>{fmt(avail)}</div></div>
+                          </div>
+                          <div style={{height:5,background:B.border,borderRadius:99,overflow:"hidden"}}>
+                            <div style={{width:`${pct(used,c.limit)}%`,height:"100%",background:c.color,borderRadius:99}}/>
+                          </div>
+                          <div style={{fontSize:10,color:B.textMuted,marginTop:4}}>{pct(used,c.limit)}% utilizado</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()}
+
             {cards.length===0&&<div style={S.emptyState}><div style={{fontSize:48}}>💳</div><div style={{color:B.textMuted,fontSize:14}}>Nenhum cartão cadastrado</div><button style={S.btnPrimary} onClick={()=>setShowCardForm(true)}>Adicionar cartão</button></div>}
+
+            {/* Milhas */}
             <div style={S.card}>
               <div style={S.cardTitle}><Icon d={ic.plane} size={14} stroke={B.green}/>Milhas — {MONTHS_FULL[selMonth]}/{selYear}</div>
               {miles.filter(m=>m.month===selMonth&&m.year===selYear).length===0?<div style={S.empty}>Nenhum saldo lançado para este mês</div>:(
@@ -679,6 +793,7 @@ function Dashboard({user}){
               )}
               <button style={{...S.btnSecondary,marginTop:12,justifyContent:"center"}} onClick={()=>{setEditMiles(null);setShowMilesForm(true);}}><Icon d={ic.plus} size={13}/> Atualizar Milhas</button>
             </div>
+
             {showCardForm&&<Modal onClose={()=>{setShowCardForm(false);setEditCard(null);}} title={editCard?"Editar Cartão":"Novo Cartão 💳"}><CardForm item={editCard} onSave={saveCard} onClose={()=>{setShowCardForm(false);setEditCard(null);}}/></Modal>}
             {showMilesForm&&<Modal onClose={()=>{setShowMilesForm(false);setEditMiles(null);}} title={editMiles?"Editar Milhas":"Lançar Milhas ✈️"}><MilesForm item={editMiles} selMonth={selMonth} selYear={selYear} onSave={saveMiles} onClose={()=>{setShowMilesForm(false);setEditMiles(null);}}/></Modal>}
           </div>
@@ -851,7 +966,7 @@ function ProgressRow({label,value,total,color}){
   );
 }
 
-function GroupSection({group,items,total,onToggle,onEdit,onDelete,onDeleteGroup}){
+function GroupSection({group,items,total,onToggle,onEdit,onDelete,onDeleteGroup,onEditGroup}){
   const [open,setOpen]=useState(true);
   return(
     <div style={S.groupCard}>
@@ -863,6 +978,7 @@ function GroupSection({group,items,total,onToggle,onEdit,onDelete,onDeleteGroup}
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontWeight:700,fontSize:14,color:B.navy}}>{fmt(total)}</span>
+          <button style={{...S.iconBtn,padding:2}} onClick={e=>{e.stopPropagation();onEditGroup&&onEditGroup(group);}}><Icon d={ic.edit} size={12} stroke="#6366f1"/></button>
           <button style={{...S.iconBtn,padding:2}} onClick={e=>{e.stopPropagation();if(window.confirm("Remover grupo?"))onDeleteGroup(group.id);}}><Icon d={ic.trash} size={12} stroke={B.danger}/></button>
           <Icon d={open?ic.chevron_down:ic.chevron_right} size={14} stroke={B.grayMid}/>
         </div>
@@ -1014,8 +1130,8 @@ function RevenueForm({revGroups,item,selMonth,selYear,onSave,onClose}){
   );
 }
 
-function GroupForm({onSave,onClose}){
-  const [name,setName]=useState("");const [color,setColor]=useState(B.green);const [icon,setIcon]=useState("tag");
+function GroupForm({item,onSave,onClose}){
+  const [name,setName]=useState(item?.name||"");const [color,setColor]=useState(item?.color||B.green);const [icon,setIcon]=useState(item?.icon||"tag");
   const ICONS=["home","car","heart","bolt","wallet","tag","star","chart","coin","plane"];
   return(
     <div style={S.form}>
@@ -1029,7 +1145,7 @@ function GroupForm({onSave,onClose}){
       </div>
       <div style={S.formActions}>
         <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
-        <button style={S.btnPrimary} onClick={()=>name&&onSave(name,icon,color)}>Criar</button>
+        <button style={S.btnPrimary} onClick={()=>name&&onSave(name,icon,color,item?.id)}>{item?"Salvar Alterações":"Criar"}</button>
       </div>
     </div>
   );
@@ -1070,6 +1186,8 @@ function CardForm({item,onSave,onClose}){
   const [limit,setLimit]=useState(item?.limit||"");
   const [used,setUsed]=useState(item?.used||"");
   const [color,setColor]=useState(item?.color||B.navy);
+  const [dueDay,setDueDay]=useState(item?.dueDay||"");
+  const [annualFee,setAnnualFee]=useState(item?.annualFee||"");
   return(
     <div style={S.form}>
       <label style={S.label}>Nome do Cartão *</label>
@@ -1080,11 +1198,18 @@ function CardForm({item,onSave,onClose}){
         <div><label style={S.label}>Limite Total (R$) *</label><input style={S.input} type="number" value={limit} onChange={e=>setLimit(e.target.value)} placeholder="0,00"/></div>
         <div><label style={S.label}>Valor Utilizado (R$)</label><input style={S.input} type="number" value={used} onChange={e=>setUsed(e.target.value)} placeholder="0,00"/></div>
       </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <div><label style={S.label}>Dia de Vencimento</label><input style={S.input} type="number" min={1} max={31} value={dueDay} onChange={e=>setDueDay(e.target.value)} placeholder="ex: 10"/></div>
+        <div><label style={S.label}>Anuidade/Mensalidade (R$)</label><input style={S.input} type="number" value={annualFee} onChange={e=>setAnnualFee(e.target.value)} placeholder="0,00"/></div>
+      </div>
+      <div style={{background:B.greenPale,borderRadius:10,padding:10}}>
+        <div style={{fontSize:11,color:B.greenDim}}>💡 A anuidade será exibida como custo anual. Se for mensalidade, multiplique por 12.</div>
+      </div>
       <label style={S.label}>Cor do Cartão</label>
       <input type="color" value={color} onChange={e=>setColor(e.target.value)} style={{...S.input,padding:4,height:44,cursor:"pointer"}}/>
       <div style={S.formActions}>
         <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
-        <button style={S.btnPrimary} onClick={()=>name&&limit&&onSave({...(item||{}),name,bank,limit:parseFloat(limit),used:parseFloat(used||0),color})}>Salvar</button>
+        <button style={S.btnPrimary} onClick={()=>name&&limit&&onSave({...(item||{}),name,bank,limit:parseFloat(limit),used:parseFloat(used||0),color,dueDay:dueDay?parseInt(dueDay):null,annualFee:annualFee?parseFloat(annualFee):0})}>Salvar</button>
       </div>
     </div>
   );
