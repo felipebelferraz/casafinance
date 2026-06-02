@@ -1103,20 +1103,21 @@ function RevenueForm({revGroups,item,selMonth,selYear,onSave,onClose}){
         <input type="checkbox" checked={recurring} onChange={e=>setRecurring(e.target.checked)}/>
         <Icon d={ic.repeat} size={14} stroke={B.green}/> Lançar como recorrente
       </label>
-      {recurring&&!isEdit&&(
+      {/* V4.1 FIX: mostrar slider tanto em novo quanto em edição */}
+      {recurring&&(
         <div style={{background:B.greenPale,borderRadius:10,padding:12}}>
           <label style={{...S.label,color:B.greenDim}}>Repetir por quantos meses?</label>
           <div style={{display:"flex",alignItems:"center",gap:12,marginTop:6}}>
             <input type="range" min={1} max={24} value={recurMonths} onChange={e=>setRecurMonths(+e.target.value)}/>
             <span style={{fontWeight:700,color:B.green,minWidth:60}}>{recurMonths} {recurMonths===1?"mês":"meses"}</span>
           </div>
+          {isEdit&&(
+            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:B.greenDim,cursor:"pointer",marginTop:10}}>
+              <input type="checkbox" checked={updateFuture} onChange={e=>setUpdateFuture(e.target.checked)}/>
+              Atualizar também os meses seguintes com este valor
+            </label>
+          )}
         </div>
-      )}
-      {isEdit&&item?.recurring&&(
-        <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:B.green,cursor:"pointer",background:B.greenPale,padding:"10px 12px",borderRadius:10}}>
-          <input type="checkbox" checked={updateFuture} onChange={e=>setUpdateFuture(e.target.checked)}/>
-          <Icon d={ic.repeat} size={14} stroke={B.green}/> Atualizar também os meses seguintes
-        </label>
       )}
       <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:B.textSub,cursor:"pointer"}}>
         <input type="checkbox" checked={received} onChange={e=>setReceived(e.target.checked)}/>
