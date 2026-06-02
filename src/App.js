@@ -1,12 +1,11 @@
 import { useState, useMemo, useEffect } from "react";
 import { db } from "./firebase";
-import { collection, doc, setDoc, deleteDoc, onSnapshot } from "firebase/firestore";
+import { collection, doc, setDoc, deleteDoc, onSnapshot, query, where, getDocs } from "firebase/firestore";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "firebase/auth";
 
 const auth = getAuth();
 const provider = new GoogleAuthProvider();
 
-// ─── Icons ───────────────────────────────────────────────────────────────────
 const Icon = ({ d, size = 16, stroke = "currentColor", fill = "none", strokeWidth = 1.8 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>
 );
@@ -17,7 +16,8 @@ const ic = {
   home: "M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10",
   heart: "M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z",
   bolt: "M13 2L3 14h9l-1 8 10-12h-9l1-8z",
-  chart: "M18 20V10M12 20V4M6 20v-6", warning: "M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01",
+  chart: "M18 20V10M12 20V4M6 20v-6",
+  warning: "M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01",
   x: "M18 6L6 18M6 6l12 12", chevron_right: "M9 18l6-6-6-6", chevron_down: "M6 9l6 6 6-6",
   repeat: "M17 1l4 4-4 4M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 01-4 4H3",
   target: "M12 22a10 10 0 100-20 10 10 0 000 20zM12 18a6 6 0 100-12 6 6 0 000 12zM12 14a2 2 0 100-4 2 2 0 000 4z",
@@ -31,7 +31,7 @@ const ic = {
   star: "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z",
   credit: "M1 4h22v4H1zM1 10h22v10a2 2 0 01-2 2H3a2 2 0 01-2-2V10zM6 16h4",
   plane: "M21 16v-2l-8-5V3.5a1.5 1.5 0 00-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z",
-  info: "M12 22a10 10 0 100-20 10 10 0 000 20zM12 8h.01M12 12v4",
+  download: "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3",
 };
 
 const MONTHS_FULL = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
@@ -62,9 +62,7 @@ function SplashScreen({ onDone }) {
       <div style={sp.content}>
         <div style={sp.logoWrap}>
           <div style={sp.logoCircle}><span style={{fontSize:42}}>🏠</span></div>
-          <div style={sp.rings}>
-            {[0,0.4,0.8].map((d,i)=><div key={i} style={{...sp.ring,animationDelay:`${d}s`}}/>)}
-          </div>
+          <div style={sp.rings}>{[0,0.4,0.8].map((d,i)=><div key={i} style={{...sp.ring,animationDelay:`${d}s`}}/>)}</div>
         </div>
         <div style={sp.title}>CasaFinance</div>
         <div style={sp.subtitle}>Gestão Doméstica Inteligente</div>
@@ -95,7 +93,7 @@ const sp = {
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
 function LoginScreen() {
   const [loading,setLoading]=useState(false);
-  const handleLogin=async()=>{setLoading(true);try{await signInWithPopup(auth,provider);}catch(e){setLoading(false);}};
+  const handle=async()=>{setLoading(true);try{await signInWithPopup(auth,provider);}catch(e){setLoading(false);}};
   return (
     <div style={ls.wrap}>
       <div style={ls.card}>
@@ -105,7 +103,7 @@ function LoginScreen() {
         <div style={ls.divider}/>
         <div style={ls.welcome}>Bem-vindo de volta!</div>
         <div style={ls.desc}>Faça login para acessar suas finanças com segurança.</div>
-        <button style={{...ls.btn,opacity:loading?0.7:1}} onClick={handleLogin} disabled={loading}>
+        <button style={{...ls.btn,opacity:loading?0.7:1}} onClick={handle} disabled={loading}>
           <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
           {loading?"Entrando...":"Entrar com Google"}
         </button>
@@ -128,7 +126,6 @@ const ls={
   footer:{fontSize:11,color:"#475569",marginTop:8},
 };
 
-// ─── MAIN ────────────────────────────────────────────────────────────────────
 export default function App() {
   const [splash,setSplash]=useState(true);
   const [user,setUser]=useState(null);
@@ -142,7 +139,6 @@ export default function App() {
 
 function Loading(){return(<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",flexDirection:"column",gap:16,fontFamily:"DM Sans,sans-serif",background:"#f8fafc"}}><div style={{fontSize:48}}>🏠</div><div style={{fontWeight:700,fontSize:20,color:"#1e293b"}}>CasaFinance</div><div style={{color:"#94a3b8",fontSize:14}}>Carregando...</div></div>);}
 
-// ─── DASHBOARD ───────────────────────────────────────────────────────────────
 function Dashboard({user}){
   const uid=user.uid;
   const base=`users/${uid}`;
@@ -172,7 +168,6 @@ function Dashboard({user}){
   const [histFilter,setHistFilter]=useState("all");
   const [toast,setToast]=useState(null);
   const [lightboxGroup,setLightboxGroup]=useState(null);
-  const [editGroupItem,setEditGroupItem]=useState(null);
 
   const notify=(msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),3000);};
 
@@ -190,7 +185,6 @@ function Dashboard({user}){
     return()=>unsubs.forEach(u=>u());
   },[uid]);
 
-  // ── Computed ──
   const monthExpenses=useMemo(()=>expenses.filter(e=>e.month===selMonth&&e.year===selYear),[expenses,selMonth,selYear]);
   const monthRevenues=useMemo(()=>revenues.filter(r=>r.month===selMonth&&r.year===selYear),[revenues,selMonth,selYear]);
   const totalExpenses=useMemo(()=>monthExpenses.reduce((s,e)=>s+(e.value||0),0),[monthExpenses]);
@@ -246,54 +240,78 @@ function Dashboard({user}){
   // ── Actions ──
   const togglePaid=async(id)=>{const item=expenses.find(e=>e.id===id);await setDoc(doc(db,`${base}/expenses`,id),{...item,paid:!item.paid});};
   const deleteExpense=async(id)=>{await deleteDoc(doc(db,`${base}/expenses`,id));notify("Despesa removida");};
+
   const saveExpense=async(data)=>{
     const months=data.recurring?parseInt(data.recurMonths||12):1;
-    if(data.id){await setDoc(doc(db,`${base}/expenses`,data.id),data);notify("Despesa atualizada!");}
-    else{
+    if(data.id){
+      await setDoc(doc(db,`${base}/expenses`,data.id),data);
+      notify("Despesa atualizada!");
+    } else {
       for(let i=0;i<months;i++){
         let m=data.month+i;let y=data.year;
         if(m>11){m-=12;y+=1;}
         const id=`exp_${Date.now()}_${i}`;
-        await setDoc(doc(db,`${base}/expenses`,id),{...data,id,month:m,year:y});
+        // V4 FIX: apenas o mês atual (i===0) pode ter paid=true, demais ficam false
+        const isPaid = i===0 ? (data.paid||false) : false;
+        await setDoc(doc(db,`${base}/expenses`,id),{...data,id,month:m,year:y,paid:isPaid});
       }
       notify(months>1?`Lançado para ${months} meses!`:"Despesa adicionada!");
     }
-    setShowForm(false);setEditItem(null);setEditGroupItem(null);
+    setShowForm(false);setEditItem(null);
   };
+
   const addGroup=async(name,icon,color)=>{
-    // Save all current groups + new one to avoid losing defaults
-    const existingIds=groups.map(g=>g.id);
-    for(const g of groups){
-      if(!existingIds.includes(g.id)||true){
-        await setDoc(doc(db,`${base}/groups`,g.id),g);
-      }
-    }
+    for(const g of groups){await setDoc(doc(db,`${base}/groups`,g.id),g);}
     const id=`g_${Date.now()}`;
     await setDoc(doc(db,`${base}/groups`,id),{id,name,icon,color});
     setShowGroupForm(false);notify("Grupo criado!");
   };
   const deleteGroup=async(id)=>{await deleteDoc(doc(db,`${base}/groups`,id));notify("Grupo removido");};
+
   const saveRevenue=async(data)=>{
     const months=data.recurring?parseInt(data.recurMonths||12):1;
-    if(data.id){await setDoc(doc(db,`${base}/revenues`,data.id),data);notify("Receita atualizada!");}
-    else{
+    if(data.id){
+      // V4 FIX: ao editar recorrente, atualiza meses subsequentes também
+      await setDoc(doc(db,`${base}/revenues`,data.id),data);
+      if(data.recurring&&data.updateFuture){
+        // busca outros lançamentos com mesma descrição e grupo nos meses futuros
+        const allRevs=revenues.filter(r=>
+          r.description===data.description&&
+          r.groupId===data.groupId&&
+          r.id!==data.id&&
+          (r.year>data.year||(r.year===data.year&&r.month>data.month))
+        );
+        for(const r of allRevs){
+          await setDoc(doc(db,`${base}/revenues`,r.id),{...r,value:data.value,source:data.source,groupId:data.groupId});
+        }
+        notify(`Receita atualizada em ${allRevs.length+1} meses!`);
+      } else {
+        notify("Receita atualizada!");
+      }
+    } else {
       for(let i=0;i<months;i++){
         let m=data.month+i;let y=data.year;
         if(m>11){m-=12;y+=1;}
         const id=`rev_${Date.now()}_${i}`;
-        await setDoc(doc(db,`${base}/revenues`,id),{...data,id,month:m,year:y});
+        // V4: apenas mês atual pode ser marcado como recebido
+        const isReceived = i===0 ? (data.received||false) : false;
+        await setDoc(doc(db,`${base}/revenues`,id),{...data,id,month:m,year:y,received:isReceived});
       }
       notify(months>1?`Receita lançada para ${months} meses!`:"Receita adicionada!");
     }
     setShowRevForm(false);setEditItem(null);
   };
+
+  const toggleReceived=async(id)=>{const item=revenues.find(r=>r.id===id);await setDoc(doc(db,`${base}/revenues`,id),{...item,received:!item.received});};
   const deleteRevenue=async(id)=>{await deleteDoc(doc(db,`${base}/revenues`,id));notify("Receita removida");};
+
   const addRevGroup=async(name,icon,color)=>{
     for(const g of revGroups){await setDoc(doc(db,`${base}/revGroups`,g.id),g);}
     const id=`rg_${Date.now()}`;
     await setDoc(doc(db,`${base}/revGroups`,id),{id,name,icon,color});
     setShowRevGroupForm(false);notify("Categoria criada!");
   };
+
   const saveGoal=async(data)=>{const id=data.id||`goal_${Date.now()}`;await setDoc(doc(db,`${base}/goals`,id),{...data,id});setShowGoalForm(false);setEditGoal(null);notify(data.id?"Meta atualizada!":"Meta criada! 🎯");};
   const depositGoal=async(goal,value,note)=>{const updated={...goal,saved:(goal.saved||0)+value,deposits:[...(goal.deposits||[]),{date:new Date().toISOString().slice(0,10),value,note}]};await setDoc(doc(db,`${base}/goals`,goal.id),updated);notify("Depósito realizado! 💰");};
   const deleteGoal=async(id)=>{await deleteDoc(doc(db,`${base}/goals`,id));notify("Meta removida");};
@@ -303,11 +321,9 @@ function Dashboard({user}){
   const deleteMiles=async(id)=>{await deleteDoc(doc(db,`${base}/miles`,id));notify("Programa removido");};
   const saveSavingGoal=async(val)=>{setSavingGoal(val);await setDoc(doc(db,`${base}/settings/prefs`),{savingGoal:val});};
 
-  const maxHistory=Math.max(...filteredHistory.map(h=>Math.max(h.total,h.rev)),1);
   const greet=()=>{const h=TODAY.getHours();return h<12?"Bom dia":h<18?"Boa tarde":"Boa noite";};
-
-  // Lightbox group items
   const lightboxItems=lightboxGroup?monthExpenses.filter(e=>e.groupId===lightboxGroup.id):[];
+  const receivedRevenue=useMemo(()=>monthRevenues.filter(r=>r.received).reduce((s,r)=>s+(r.value||0),0),[monthRevenues]);
 
   if(loading) return <Loading/>;
 
@@ -315,9 +331,8 @@ function Dashboard({user}){
     <div style={S.app}>
       <style>{`
         *{box-sizing:border-box;}
-        @keyframes slide-up{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
         @keyframes toast-in{from{opacity:0;transform:translate(-50%,-20px)}to{opacity:1;transform:translate(-50%,0)}}
-        @keyframes fade-in{from{opacity:0}to{opacity:1}}
+        @keyframes logo-pop{0%{transform:scale(0);opacity:0}60%{transform:scale(1.2)}100%{transform:scale(1);opacity:1}}
         input[type=range]{-webkit-appearance:none;height:6px;border-radius:99px;background:#e2e8f0;outline:none;width:100%}
         input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#6366f1;cursor:pointer;box-shadow:0 2px 6px rgba(99,102,241,0.4)}
         select{appearance:none;}
@@ -345,19 +360,19 @@ function Dashboard({user}){
                   </button>
                   <div style={{flex:1}}>
                     <div style={{fontSize:13,fontWeight:600,color:"#1e293b",textDecoration:item.paid?"line-through":"none"}}>{item.description}</div>
-                    <div style={{fontSize:11,color:"#94a3b8"}}>{item.creditor}{item.dueDate?` · Vence ${item.dueDate}`:item.dueDay?` · Vence dia ${item.dueDay}`:""}</div>
+                    <div style={{fontSize:11,color:"#94a3b8"}}>{item.creditor}{item.dueDate?` · Vence ${item.dueDate}`:""}</div>
                     {item.refMonth!==undefined&&<div style={{fontSize:10,color:"#6366f1"}}>Ref: {MONTHS_FULL[item.refMonth]}/{item.refYear||selYear}</div>}
                   </div>
                   <div style={{fontWeight:700,fontSize:14,color:item.paid?"#10b981":"#1e293b"}}>{fmt(item.value)}</div>
                   <div style={{display:"flex",gap:4}}>
-                    <button style={S.iconBtn} onClick={()=>{setEditGroupItem(item);setEditItem(item);setShowForm(true);}}><Icon d={ic.edit} size={13} stroke="#6366f1"/></button>
+                    <button style={S.iconBtn} onClick={()=>{setEditItem(item);setShowForm(true);setLightboxGroup(null);}}><Icon d={ic.edit} size={13} stroke="#6366f1"/></button>
                     <button style={S.iconBtn} onClick={()=>deleteExpense(item.id)}><Icon d={ic.trash} size={13} stroke="#ef4444"/></button>
                   </div>
                 </div>
               ))}
               {lightboxItems.length===0&&<div style={S.empty}>Nenhuma despesa neste grupo</div>}
             </div>
-            <button style={{...S.btnPrimary,justifyContent:"center",marginTop:16}} onClick={()=>{setEditGroupItem(null);setEditItem(null);setShowForm(true);}}>
+            <button style={{...S.btnPrimary,justifyContent:"center",marginTop:16}} onClick={()=>{setEditItem(null);setShowForm(true);setLightboxGroup(null);}}>
               <Icon d={ic.plus} size={14}/> Nova Despesa em {lightboxGroup.name}
             </button>
           </div>
@@ -398,13 +413,12 @@ function Dashboard({user}){
         {activeTab==="dashboard"&&(
           <div style={S.section}>
             <div style={S.kpiGrid}>
-              <KpiCard label="Receita" value={fmt(totalRevenue)} icon="wallet" color="#10b981" sub={`${monthRevenues.length} lançamento(s)`}/>
+              <KpiCard label="Receita" value={fmt(totalRevenue)} icon="wallet" color="#10b981" sub={`Recebido: ${fmt(receivedRevenue)}`}/>
               <KpiCard label="Despesas" value={fmt(totalExpenses)} icon="tag" color="#f59e0b" sub={`${pct(totalExpenses,totalRevenue)}% da receita`}/>
               <KpiCard label="Saldo" value={fmt(balance)} icon="chart" color={balance>=0?"#6366f1":"#ef4444"} sub={balance>=0?"✓ No azul":"⚠ No vermelho"}/>
               <KpiCard label="Meta Economia" value={fmt(savingTarget)} icon="target" color="#ec4899" sub={`${savingGoal}% · ${balance>=savingTarget?"✓ Atingida!":"Faltam "+fmt(savingTarget-balance)}`}/>
             </div>
 
-            {/* Cards summary no dashboard */}
             {cards.length>0&&(
               <div style={S.card}>
                 <div style={S.cardTitle}><Icon d={ic.credit} size={14} stroke="#6366f1"/> Limites Disponíveis</div>
@@ -448,7 +462,6 @@ function Dashboard({user}){
               </div>
             )}
 
-            {/* Pie Chart clicável */}
             {byGroup.length>0&&(
               <div style={S.card}>
                 <div style={S.cardTitle}>Distribuição por Grupo <span style={{fontSize:11,color:"#94a3b8",fontWeight:400}}>· clique para detalhar</span></div>
@@ -456,8 +469,7 @@ function Dashboard({user}){
                   <PieChart data={pieData} onSliceClick={g=>{const full=byGroup.find(x=>x.id===g.id);setLightboxGroup(full);}}/>
                   <div style={{flex:1,display:"flex",flexDirection:"column",gap:8,minWidth:160}}>
                     {pieData.map(g=>(
-                      <div key={g.id} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"4px 8px",borderRadius:8,transition:"background .15s"}}
-                        onClick={()=>{const full=byGroup.find(x=>x.id===g.id);setLightboxGroup(full);}}>
+                      <div key={g.id} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"4px 8px",borderRadius:8}} onClick={()=>{const full=byGroup.find(x=>x.id===g.id);setLightboxGroup(full);}}>
                         <div style={{width:10,height:10,borderRadius:3,background:g.color,flexShrink:0}}/>
                         <span style={{fontSize:12,color:"#475569",flex:1}}>{g.name}</span>
                         <span style={{fontSize:12,fontWeight:700,color:g.color}}>{g.pct}%</span>
@@ -470,23 +482,17 @@ function Dashboard({user}){
             )}
 
             <div style={S.card}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-                <div style={S.cardTitle}>🎯 Meta de Economia — {MONTHS_FULL[selMonth]}</div>
-              </div>
+              <div style={S.cardTitle}>🎯 Meta de Economia — {MONTHS_FULL[selMonth]}</div>
               <div style={{background:"#f8fafc",borderRadius:12,padding:16,marginBottom:12}}>
-                <div style={{display:"flex",gap:4,alignItems:"baseline",marginBottom:4}}>
-                  <span style={{fontSize:11,color:"#64748b"}}>Se sua receita é</span>
-                  <strong style={{color:"#10b981"}}>{fmt(totalRevenue)}</strong>
-                  <span style={{fontSize:11,color:"#64748b"}}>e você quer guardar</span>
-                  <strong style={{color:"#6366f1"}}>{savingGoal}%</strong>
+                <div style={{fontSize:13,color:"#64748b",lineHeight:1.8}}>
+                  Receita: <strong style={{color:"#10b981"}}>{fmt(totalRevenue)}</strong> · Meta: <strong style={{color:"#6366f1"}}>{savingGoal}%</strong> = <strong style={{color:"#6366f1"}}>{fmt(savingTarget)}</strong>
                 </div>
-                <div style={{fontSize:13,color:"#64748b"}}>→ Deve sobrar pelo menos <strong style={{color:"#6366f1"}}>{fmt(savingTarget)}</strong> após pagar todas as despesas.</div>
                 <div style={{marginTop:8,fontSize:13,fontWeight:700,color:balance>=savingTarget?"#10b981":"#ef4444"}}>
-                  {balance>=savingTarget?`✓ Você tem ${fmt(balance)} de saldo — meta atingida!`:`⚠ Seu saldo atual é ${fmt(balance)} — faltam ${fmt(savingTarget-balance)} para atingir a meta.`}
+                  {balance>=savingTarget?`✓ Saldo de ${fmt(balance)} — meta atingida!`:`⚠ Saldo atual ${fmt(balance)} — faltam ${fmt(savingTarget-balance)}`}
                 </div>
               </div>
               <input type="range" min={5} max={50} value={savingGoal} onChange={e=>saveSavingGoal(+e.target.value)}/>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#94a3b8",marginTop:4}}><span>5%</span><span style={{fontWeight:700,color:"#6366f1"}}>{savingGoal}% selecionado</span><span>50%</span></div>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#94a3b8",marginTop:4}}><span>5%</span><span style={{fontWeight:700,color:"#6366f1"}}>{savingGoal}%</span><span>50%</span></div>
             </div>
           </div>
         )}
@@ -511,10 +517,10 @@ function Dashboard({user}){
                 <button style={S.btnPrimary} onClick={()=>setShowForm(true)}>Adicionar primeira despesa</button>
               </div>
             )}
-            {showForm&&<Modal onClose={()=>{setShowForm(false);setEditItem(null);setEditGroupItem(null);}} title={editItem?"Editar Despesa":"Nova Despesa"}>
-              <ExpenseForm groups={groups} item={editItem} selMonth={selMonth} selYear={selYear} onSave={saveExpense} onClose={()=>{setShowForm(false);setEditItem(null);setEditGroupItem(null);}}/>
+            {showForm&&<Modal onClose={()=>{setShowForm(false);setEditItem(null);}} title={editItem?"Editar Despesa":"Nova Despesa"}>
+              <ExpenseForm groups={groups} item={editItem} selMonth={selMonth} selYear={selYear} onSave={saveExpense} onClose={()=>{setShowForm(false);setEditItem(null);}}/>
             </Modal>}
-            {showGroupForm&&<Modal onClose={()=>setShowGroupForm(false)} title="Novo Grupo de Despesa">
+            {showGroupForm&&<Modal onClose={()=>setShowGroupForm(false)} title="Novo Grupo">
               <GroupForm onSave={addGroup} onClose={()=>setShowGroupForm(false)}/>
             </Modal>}
           </div>
@@ -530,7 +536,11 @@ function Dashboard({user}){
             <div style={S.card}>
               <div style={S.cardTitle}>Total — {MONTHS_FULL[selMonth]}</div>
               <div style={{fontSize:32,fontWeight:800,color:"#10b981",letterSpacing:-1}}>{fmt(totalRevenue)}</div>
-              <div style={{fontSize:12,color:"#94a3b8",marginTop:4}}>{monthRevenues.length} lançamento(s)</div>
+              <div style={{display:"flex",gap:16,marginTop:6}}>
+                <div style={{fontSize:12,color:"#94a3b8"}}>{monthRevenues.length} lançamento(s)</div>
+                <div style={{fontSize:12,color:"#10b981",fontWeight:600}}>✓ Recebido: {fmt(receivedRevenue)}</div>
+                <div style={{fontSize:12,color:"#f59e0b",fontWeight:600}}>⏳ A receber: {fmt(totalRevenue-receivedRevenue)}</div>
+              </div>
             </div>
             {revGroups.map(rg=>{
               const items=monthRevenues.filter(r=>r.groupId===rg.id);
@@ -545,12 +555,19 @@ function Dashboard({user}){
                     <span style={{fontWeight:700,fontSize:14,color:"#10b981"}}>{fmt(items.reduce((s,r)=>s+(r.value||0),0))}</span>
                   </div>
                   {items.map(r=>(
-                    <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:"1px solid #f8fafc"}}>
+                    <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:"1px solid #f8fafc",opacity:r.received?0.7:1}}>
+                      {/* V4: botão recebido */}
+                      <button style={{width:22,height:22,borderRadius:6,border:`2px solid ${r.received?"#10b981":"#cbd5e1"}`,background:r.received?"#10b981":"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} onClick={()=>toggleReceived(r.id)}>
+                        {r.received&&<Icon d={ic.check} size={11} stroke="#fff" strokeWidth={2.5}/>}
+                      </button>
                       <div style={{flex:1}}>
-                        <div style={{fontSize:13,fontWeight:600,color:"#1e293b"}}>{r.description}</div>
-                        <div style={{fontSize:11,color:"#94a3b8"}}>{r.source||""}{r.recurring?" · recorrente":""}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:6}}>
+                          <span style={{fontSize:13,fontWeight:600,color:"#1e293b",textDecoration:r.received?"line-through":"none"}}>{r.description}</span>
+                          {r.recurring&&<span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:"#10b981",background:"#dcfce7",padding:"2px 6px",borderRadius:99}}><Icon d={ic.repeat} size={10}/>recorrente</span>}
+                        </div>
+                        <div style={{fontSize:11,color:"#94a3b8"}}>{r.source||""}</div>
                       </div>
-                      <div style={{fontWeight:700,fontSize:14,color:"#10b981"}}>{fmt(r.value)}</div>
+                      <div style={{fontWeight:700,fontSize:14,color:r.received?"#10b981":"#1e293b"}}>{fmt(r.value)}</div>
                       <button style={S.iconBtn} onClick={()=>{setEditItem(r);setShowRevForm(true);}}><Icon d={ic.edit} size={13} stroke="#6366f1"/></button>
                       <button style={S.iconBtn} onClick={()=>deleteRevenue(r.id)}><Icon d={ic.trash} size={13} stroke="#ef4444"/></button>
                     </div>
@@ -568,7 +585,7 @@ function Dashboard({user}){
             {showRevForm&&<Modal onClose={()=>{setShowRevForm(false);setEditItem(null);}} title={editItem?"Editar Receita":"Nova Receita"}>
               <RevenueForm revGroups={revGroups} item={editItem} selMonth={selMonth} selYear={selYear} onSave={saveRevenue} onClose={()=>{setShowRevForm(false);setEditItem(null);}}/>
             </Modal>}
-            {showRevGroupForm&&<Modal onClose={()=>setShowRevGroupForm(false)} title="Nova Categoria de Receita">
+            {showRevGroupForm&&<Modal onClose={()=>setShowRevGroupForm(false)} title="Nova Categoria">
               <GroupForm onSave={addRevGroup} onClose={()=>setShowRevGroupForm(false)}/>
             </Modal>}
           </div>
@@ -581,8 +598,7 @@ function Dashboard({user}){
             {goals.length===0&&(
               <div style={S.emptyState}>
                 <div style={{fontSize:48}}>🐷</div>
-                <div style={{color:"#64748b",fontSize:14}}>Crie sua primeira meta de economia!</div>
-                <div style={{fontSize:12,color:"#94a3b8",textAlign:"center"}}>Ex: Geladeira nova, viagem de férias, fundo de emergência...</div>
+                <div style={{color:"#64748b",fontSize:14}}>Crie sua primeira meta!</div>
               </div>
             )}
             {goals.map(goal=><GoalCard key={goal.id} goal={goal} onDeposit={depositGoal} onEdit={g=>{setEditGoal(g);setShowGoalForm(true);}} onDelete={deleteGoal}/>)}
@@ -597,10 +613,8 @@ function Dashboard({user}){
           <div style={S.section}>
             <div style={S.rowBetween}>
               <button style={S.btnPrimary} onClick={()=>{setEditCard(null);setShowCardForm(true);}}><Icon d={ic.plus} size={14}/> Novo Cartão</button>
-              <button style={S.btnSecondary} onClick={()=>{setEditMiles(null);setShowMilesForm(true);}}><Icon d={ic.plus} size={14}/> Programa de Milhas</button>
+              <button style={S.btnSecondary} onClick={()=>{setEditMiles(null);setShowMilesForm(true);}}><Icon d={ic.plus} size={14}/> Milhas</button>
             </div>
-
-            {/* Cartões */}
             {cards.length>0&&(
               <div style={S.card}>
                 <div style={S.cardTitle}><Icon d={ic.credit} size={14} stroke="#6366f1"/> Meus Cartões</div>
@@ -608,7 +622,7 @@ function Dashboard({user}){
                   const used=c.used||0;const avail=(c.limit||0)-used;
                   return(
                     <div key={c.id} style={{marginBottom:12,background:"linear-gradient(135deg,"+c.color+"22,"+c.color+"11)",border:`1px solid ${c.color}33`,borderRadius:14,padding:16}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
                         <div>
                           <div style={{fontWeight:700,fontSize:15,color:"#1e293b"}}>{c.name}</div>
                           <div style={{fontSize:11,color:"#94a3b8"}}>{c.bank||""}</div>
@@ -619,41 +633,24 @@ function Dashboard({user}){
                         </div>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
-                        <div style={{textAlign:"center"}}>
-                          <div style={{fontSize:10,color:"#94a3b8"}}>Limite Total</div>
-                          <div style={{fontWeight:700,fontSize:13,color:"#1e293b"}}>{fmt(c.limit)}</div>
-                        </div>
-                        <div style={{textAlign:"center"}}>
-                          <div style={{fontSize:10,color:"#94a3b8"}}>Utilizado</div>
-                          <div style={{fontWeight:700,fontSize:13,color:"#f59e0b"}}>{fmt(used)}</div>
-                        </div>
-                        <div style={{textAlign:"center"}}>
-                          <div style={{fontSize:10,color:"#94a3b8"}}>Disponível</div>
-                          <div style={{fontWeight:700,fontSize:13,color:"#10b981"}}>{fmt(avail)}</div>
-                        </div>
+                        <div style={{textAlign:"center"}}><div style={{fontSize:10,color:"#94a3b8"}}>Total</div><div style={{fontWeight:700,fontSize:13}}>{fmt(c.limit)}</div></div>
+                        <div style={{textAlign:"center"}}><div style={{fontSize:10,color:"#94a3b8"}}>Utilizado</div><div style={{fontWeight:700,fontSize:13,color:"#f59e0b"}}>{fmt(used)}</div></div>
+                        <div style={{textAlign:"center"}}><div style={{fontSize:10,color:"#94a3b8"}}>Disponível</div><div style={{fontWeight:700,fontSize:13,color:"#10b981"}}>{fmt(avail)}</div></div>
                       </div>
                       <div style={{height:6,background:"#e2e8f0",borderRadius:99,overflow:"hidden"}}>
-                        <div style={{width:`${pct(used,c.limit)}%`,height:"100%",background:c.color,borderRadius:99,transition:"width .5s"}}/>
+                        <div style={{width:`${pct(used,c.limit)}%`,height:"100%",background:c.color,borderRadius:99}}/>
                       </div>
-                      <div style={{fontSize:10,color:"#94a3b8",marginTop:4}}>{pct(used,c.limit)}% utilizado</div>
                     </div>
                   );
                 })}
               </div>
             )}
-            {cards.length===0&&(
-              <div style={S.emptyState}>
-                <div style={{fontSize:48}}>💳</div>
-                <div style={{color:"#64748b",fontSize:14}}>Nenhum cartão cadastrado</div>
-                <button style={S.btnPrimary} onClick={()=>setShowCardForm(true)}>Adicionar cartão</button>
-              </div>
-            )}
+            {cards.length===0&&<div style={S.emptyState}><div style={{fontSize:48}}>💳</div><div style={{color:"#64748b",fontSize:14}}>Nenhum cartão cadastrado</div><button style={S.btnPrimary} onClick={()=>setShowCardForm(true)}>Adicionar cartão</button></div>}
 
-            {/* Milhas */}
             <div style={S.card}>
               <div style={S.cardTitle}><Icon d={ic.plane} size={14} stroke="#6366f1"/> Milhas — {MONTHS_FULL[selMonth]}/{selYear}</div>
               {miles.filter(m=>m.month===selMonth&&m.year===selYear).length===0?(
-                <div style={S.empty}>Nenhum saldo de milhas lançado para este mês</div>
+                <div style={S.empty}>Nenhum saldo lançado para este mês</div>
               ):(
                 miles.filter(m=>m.month===selMonth&&m.year===selYear).map(m=>(
                   <div key={m.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid #f1f5f9"}}>
@@ -693,12 +690,8 @@ function Dashboard({user}){
                 ))}
               </div>
             </div>
-
             <div style={S.card}>
-              <div style={S.cardTitle}>
-                Evolução 12 Meses
-                {histFilter==="revenue"?" · Receitas":histFilter!=="all"?` · ${groups.find(g=>g.id===histFilter)?.name}`:""}
-              </div>
+              <div style={S.cardTitle}>Evolução 12 Meses{histFilter==="revenue"?" · Receitas":histFilter!=="all"?` · ${groups.find(g=>g.id===histFilter)?.name}`:""}</div>
               <div style={{display:"flex",gap:16,fontSize:12,color:"#64748b",marginBottom:16,alignItems:"center"}}>
                 {histFilter!=="revenue"&&<span><span style={{display:"inline-block",width:10,height:10,borderRadius:3,background:"#f59e0b",marginRight:4}}/>Despesas</span>}
                 {(histFilter==="all"||histFilter==="revenue")&&<span><span style={{display:"inline-block",width:10,height:10,borderRadius:3,background:"#10b981",marginRight:4}}/>Receita</span>}
@@ -718,7 +711,6 @@ function Dashboard({user}){
                 })}
               </div>
             </div>
-
             <div style={S.card}>
               <div style={S.cardTitle}>Detalhe por Mês</div>
               <div style={{overflowX:"auto"}}>
@@ -755,16 +747,15 @@ function PieChart({data,onSliceClick}){
   const size=140;const r=54;const cx=70;const cy=70;
   const toRad=deg=>(deg-90)*Math.PI/180;
   const arc=(start,slice)=>{
-    if(slice>=360)return `M ${cx} ${cy-r} A ${r} ${r} 0 1 1 ${cx-0.01} ${cy-r} Z`;
+    if(slice>=360)return`M ${cx} ${cy-r} A ${r} ${r} 0 1 1 ${cx-0.01} ${cy-r} Z`;
     const s=toRad(start);const e=toRad(start+slice);
     const x1=cx+r*Math.cos(s);const y1=cy+r*Math.sin(s);
     const x2=cx+r*Math.cos(e);const y2=cy+r*Math.sin(e);
-    const large=slice>180?1:0;
-    return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`;
+    return`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${slice>180?1:0} 1 ${x2} ${y2} Z`;
   };
   return(
     <svg width={size} height={size} style={{flexShrink:0,cursor:"pointer"}}>
-      {data.map((d,i)=><path key={i} d={arc(d.start,d.slice)} fill={d.color} stroke="#fff" strokeWidth={2} onClick={()=>onSliceClick&&onSliceClick(d)} style={{transition:"opacity .2s"}} onMouseEnter={e=>e.target.style.opacity=".8"} onMouseLeave={e=>e.target.style.opacity="1"}/>)}
+      {data.map((d,i)=><path key={i} d={arc(d.start,d.slice)} fill={d.color} stroke="#fff" strokeWidth={2} onClick={()=>onSliceClick&&onSliceClick(d)} onMouseEnter={e=>e.target.style.opacity=".8"} onMouseLeave={e=>e.target.style.opacity="1"}/>)}
       <circle cx={cx} cy={cy} r={34} fill="#fff"/>
       <text x={cx} y={cy-5} textAnchor="middle" fontSize={10} fill="#64748b">Total</text>
       <text x={cx} y={cy+10} textAnchor="middle" fontSize={9} fontWeight="bold" fill="#1e293b">{data.reduce((s,d)=>s+d.total,0).toLocaleString("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0})}</text>
@@ -784,10 +775,7 @@ function GoalCard({goal,onDeposit,onEdit,onDelete}){
       <div style={S.goalHeader}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
           <div style={{fontSize:32}}>{EMOJIS[goal.type]||"🎯"}</div>
-          <div>
-            <div style={{fontWeight:700,fontSize:15,color:"#1e293b"}}>{goal.name}</div>
-            <div style={{fontSize:11,color:"#94a3b8"}}>{goal.description||""}</div>
-          </div>
+          <div><div style={{fontWeight:700,fontSize:15,color:"#1e293b"}}>{goal.name}</div><div style={{fontSize:11,color:"#94a3b8"}}>{goal.description||""}</div></div>
         </div>
         <div style={{display:"flex",gap:4}}>
           <button style={S.iconBtn} onClick={()=>onEdit(goal)}><Icon d={ic.edit} size={13} stroke="#6366f1"/></button>
@@ -797,7 +785,7 @@ function GoalCard({goal,onDeposit,onEdit,onDelete}){
       <div style={{background:"#f8fafc",borderRadius:10,padding:12}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
           <span style={{fontSize:12,color:"#64748b"}}>Economizado</span>
-          <span style={{fontSize:12,fontWeight:700,color:"#1e293b"}}>{fmt(saved)} / {fmt(goal.target)}</span>
+          <span style={{fontSize:12,fontWeight:700}}>{fmt(saved)} / {fmt(goal.target)}</span>
         </div>
         <div style={{height:10,background:"#f1f5f9",borderRadius:99,overflow:"hidden"}}>
           <div style={{width:`${progress}%`,height:"100%",background:progress>=100?"#10b981":"linear-gradient(90deg,#6366f1,#ec4899)",borderRadius:99,transition:"width .6s ease"}}/>
@@ -897,8 +885,7 @@ function ExpenseRow({item,onToggle,onEdit,onDelete}){
           {isOverdue&&<span style={{fontSize:10,color:"#ef4444",background:"#fef2f2",padding:"2px 6px",borderRadius:99,fontWeight:700}}>vencido</span>}
         </div>
         <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>
-          {item.creditor}
-          {item.dueDate?` · Vence ${item.dueDate}`:item.dueDay?` · Vence dia ${item.dueDay}`:""}
+          {item.creditor}{item.dueDate?` · Vence ${item.dueDate}`:item.dueDay?` · Vence dia ${item.dueDay}`:""}
           {item.refMonth!==undefined?` · Ref: ${MONTHS[item.refMonth]}/${item.refYear||CURRENT_YEAR}`:""}
         </div>
       </div>
@@ -957,10 +944,7 @@ function ExpenseForm({groups,item,selMonth,selYear,onSave,onClose}){
             {MONTHS_FULL.map((m,i)=><option key={i} value={i}>{m}</option>)}
           </select>
         </div>
-        <div>
-          <label style={S.label}>Ano de Referência</label>
-          <input style={S.input} type="number" value={refYear} onChange={e=>setRefYear(+e.target.value)} min={2020} max={2099}/>
-        </div>
+        <div><label style={S.label}>Ano</label><input style={S.input} type="number" value={refYear} onChange={e=>setRefYear(+e.target.value)} min={2020} max={2099}/></div>
       </div>
       <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"#475569",cursor:"pointer"}}>
         <input type="checkbox" checked={recurring} onChange={e=>setRecurring(e.target.checked)}/>
@@ -973,15 +957,18 @@ function ExpenseForm({groups,item,selMonth,selYear,onSave,onClose}){
             <input type="range" min={1} max={24} value={recurMonths} onChange={e=>setRecurMonths(+e.target.value)}/>
             <span style={{fontWeight:700,color:"#6366f1",minWidth:60}}>{recurMonths} {recurMonths===1?"mês":"meses"}</span>
           </div>
+          <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>💡 Apenas o mês atual ficará como opção de marcar pago. Os meses seguintes ficam em aberto automaticamente.</div>
         </div>
       )}
-      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"#475569",cursor:"pointer"}}>
-        <input type="checkbox" checked={paid} onChange={e=>setPaid(e.target.checked)}/>
-        <Icon d={ic.check} size={14} stroke="#10b981"/> Já está pago
-      </label>
+      {!recurring&&(
+        <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"#475569",cursor:"pointer"}}>
+          <input type="checkbox" checked={paid} onChange={e=>setPaid(e.target.checked)}/>
+          <Icon d={ic.check} size={14} stroke="#10b981"/> Já está pago
+        </label>
+      )}
       <div style={S.formActions}>
         <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
-        <button style={S.btnPrimary} onClick={()=>desc&&value&&onSave({...(item||{}),description:desc,creditor,value:parseFloat(value),dueDate,refMonth,refYear,groupId,recurring,recurMonths,paid,month:item?.month??selMonth,year:item?.year??selYear})}>Salvar</button>
+        <button style={S.btnPrimary} onClick={()=>desc&&value&&onSave({...(item||{}),description:desc,creditor,value:parseFloat(value),dueDate,refMonth,refYear,groupId,recurring,recurMonths,paid:recurring?false:paid,month:item?.month??selMonth,year:item?.year??selYear})}>Salvar</button>
       </div>
     </div>
   );
@@ -994,6 +981,9 @@ function RevenueForm({revGroups,item,selMonth,selYear,onSave,onClose}){
   const [groupId,setGroupId]=useState(item?.groupId||revGroups[0]?.id||"");
   const [recurring,setRecurring]=useState(item?.recurring||false);
   const [recurMonths,setRecurMonths]=useState(item?.recurMonths||12);
+  const [received,setReceived]=useState(item?.received||false);
+  const [updateFuture,setUpdateFuture]=useState(false);
+  const isEdit=!!item?.id;
   return(
     <div style={S.form}>
       <label style={S.label}>Categoria</label>
@@ -1010,18 +1000,30 @@ function RevenueForm({revGroups,item,selMonth,selYear,onSave,onClose}){
         <input type="checkbox" checked={recurring} onChange={e=>setRecurring(e.target.checked)}/>
         <Icon d={ic.repeat} size={14} stroke="#10b981"/> Lançar como recorrente
       </label>
-      {recurring&&(
+      {recurring&&!isEdit&&(
         <div>
           <label style={S.label}>Repetir por quantos meses?</label>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             <input type="range" min={1} max={24} value={recurMonths} onChange={e=>setRecurMonths(+e.target.value)}/>
             <span style={{fontWeight:700,color:"#10b981",minWidth:60}}>{recurMonths} {recurMonths===1?"mês":"meses"}</span>
           </div>
+          <div style={{fontSize:11,color:"#94a3b8",marginTop:4}}>💡 Apenas o mês atual poderá ser marcado como recebido.</div>
         </div>
       )}
+      {/* V4: ao editar recorrente, opção de atualizar meses futuros */}
+      {isEdit&&item?.recurring&&(
+        <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"#6366f1",cursor:"pointer",background:"#ede9fe",padding:"10px 12px",borderRadius:10}}>
+          <input type="checkbox" checked={updateFuture} onChange={e=>setUpdateFuture(e.target.checked)}/>
+          <Icon d={ic.repeat} size={14} stroke="#6366f1"/> Atualizar também os meses seguintes
+        </label>
+      )}
+      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"#475569",cursor:"pointer"}}>
+        <input type="checkbox" checked={received} onChange={e=>setReceived(e.target.checked)}/>
+        <Icon d={ic.check} size={14} stroke="#10b981"/> Já foi recebido ✓
+      </label>
       <div style={S.formActions}>
         <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
-        <button style={S.btnPrimary} onClick={()=>desc&&value&&onSave({...(item||{}),description:desc,source,value:parseFloat(value),groupId,recurring,recurMonths,month:item?.month??selMonth,year:item?.year??selYear})}>Salvar</button>
+        <button style={S.btnPrimary} onClick={()=>desc&&value&&onSave({...(item||{}),description:desc,source,value:parseFloat(value),groupId,recurring,recurMonths,received,updateFuture,month:item?.month??selMonth,year:item?.year??selYear})}>Salvar</button>
       </div>
     </div>
   );
@@ -1061,11 +1063,11 @@ function GoalForm({item,onSave,onClose}){
   const TYPES=[{v:"emergencia",l:"🛡️ Emergência"},{v:"viagem",l:"✈️ Viagem"},{v:"eletrodomestico",l:"🏠 Eletrodoméstico"},{v:"carro",l:"🚗 Carro"},{v:"educacao",l:"📚 Educação"},{v:"outro",l:"🎯 Outro"}];
   return(
     <div style={S.form}>
-      <label style={S.label}>Tipo de Meta</label>
+      <label style={S.label}>Tipo</label>
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
         {TYPES.map(t=><button key={t.v} onClick={()=>setType(t.v)} style={{padding:"6px 12px",borderRadius:20,border:`2px solid ${type===t.v?"#6366f1":"#e2e8f0"}`,background:type===t.v?"#ede9fe":"#f8fafc",cursor:"pointer",fontSize:12,fontWeight:type===t.v?700:400,color:type===t.v?"#6366f1":"#475569"}}>{t.l}</button>)}
       </div>
-      <label style={S.label}>Nome da Meta *</label>
+      <label style={S.label}>Nome *</label>
       <input style={S.input} value={name} onChange={e=>setName(e.target.value)} placeholder="ex: Geladeira nova"/>
       <label style={S.label}>Descrição</label>
       <input style={S.input} value={description} onChange={e=>setDescription(e.target.value)} placeholder="ex: Samsung frost free 400L"/>
@@ -1115,7 +1117,7 @@ function MilesForm({item,selMonth,selYear,onSave,onClose}){
   const EMOJIS=["✈️","🌟","💎","🏆","🎯","🚀"];
   return(
     <div style={S.form}>
-      <label style={S.label}>Programa de Milhas *</label>
+      <label style={S.label}>Programa *</label>
       <input style={S.input} value={program} onChange={e=>setProgram(e.target.value)} placeholder="ex: Smiles, TudoAzul, Livelo"/>
       <label style={S.label}>Cartão Vinculado</label>
       <input style={S.input} value={card} onChange={e=>setCard(e.target.value)} placeholder="ex: Nubank Ultravioleta"/>
@@ -1133,7 +1135,6 @@ function MilesForm({item,selMonth,selYear,onSave,onClose}){
   );
 }
 
-// ─── STYLES ───────────────────────────────────────────────────────────────────
 const S={
   app:{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"#f8fafc",minHeight:"100vh",color:"#1e293b"},
   header:{background:"linear-gradient(135deg,#1e293b 0%,#0f172a 100%)",padding:"0 16px"},
