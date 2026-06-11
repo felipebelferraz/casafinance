@@ -41,6 +41,10 @@ const ic = {
   plane:"M21 16v-2l-8-5V3.5a1.5 1.5 0 00-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z",
   users:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75",
   key:"M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4",
+  mic:"M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3zM19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8",
+  send:"M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z",
+  bot:"M12 2a2 2 0 012 2v1h3a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2h3V4a2 2 0 012-2zM9 12h.01M15 12h.01M9 16s1 1 3 1 3-1 3-1",
+  sparkle:"M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3zM5 17l.75 2.25L8 20l-2.25.75L5 23l-.75-2.25L2 20l2.25-.75L5 17z",
 };
 
 const MONTHS_FULL=["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
@@ -275,6 +279,7 @@ function Dashboard({user,familyId}){
   const [showMilesForm,setShowMilesForm]=useState(false);
   const [editMiles,setEditMiles]=useState(null);
   const [showFamilyPanel,setShowFamilyPanel]=useState(false);
+  const [showAIPanel,setShowAIPanel]=useState(false);
   const [histFilter,setHistFilter]=useState("all");
   const [memberFilter,setMemberFilter]=useState("all");
   const [toast,setToast]=useState(null);
@@ -496,6 +501,8 @@ function Dashboard({user,familyId}){
         </div>
       )}
 
+      {showAIPanel&&<AIPanel onClose={()=>setShowAIPanel(false)} expenses={expenses} revenues={revenues} groups={groups} revGroups={revGroups} selMonth={selMonth} selYear={selYear} totalExpenses={totalExpenses} totalRevenue={totalRevenue} balance={balance} paidExp={paidExp} receivedRev={receivedRev} savingGoal={savingGoal} memberFilter={memberFilter} members={members} user={user} onSaveExpense={saveExpense} onSaveRevenue={saveRevenue} groups_list={groups} revGroups_list={revGroups}/>}
+
       {showFamilyPanel&&(
         <div style={S.overlay} onClick={e=>e.target===e.currentTarget&&setShowFamilyPanel(false)}>
           <div style={S.modal}>
@@ -545,6 +552,9 @@ function Dashboard({user,familyId}){
             </div>
             <button style={{background:"rgba(51,214,159,.1)",border:`1px solid rgba(51,214,159,.2)`,cursor:"pointer",padding:"6px 10px",borderRadius:8,display:"flex",alignItems:"center",gap:6,color:B.green,fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}} onClick={()=>setShowFamilyPanel(true)}>
               <Icon d={ic.users} size={14} stroke={B.green}/>{members.length>1?`${members.length} membros`:"Família"}
+            </button>
+            <button style={{background:"linear-gradient(135deg,rgba(99,102,241,.2),rgba(51,214,159,.15))",border:`1px solid rgba(99,102,241,.3)`,cursor:"pointer",padding:"6px 10px",borderRadius:8,display:"flex",alignItems:"center",gap:6,color:"#a5b4fc",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}} onClick={()=>setShowAIPanel(true)}>
+              <Icon d={ic.sparkle} size={14} stroke="#a5b4fc"/> IA
             </button>
           </div>
         </div>
@@ -785,8 +795,21 @@ function ExpenseRow({item,onToggle,onEdit,onDelete,isOverdue}){
 function Modal({onClose,title,children}){return(<div style={S.overlay} onClick={e=>e.target===e.currentTarget&&onClose()}><div style={S.modal}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}><span style={{fontWeight:700,fontSize:16,color:B.navy}}>{title}</span><button style={S.closeBtn} onClick={onClose}><Icon d={ic.x} size={16} stroke={B.textSub}/></button></div>{children}</div></div>);}
 
 function ExpenseForm({groups,item,selMonth,selYear,onSave,onClose}){
-  const [desc,setDesc]=useState(item?.description||"");const [creditor,setCreditor]=useState(item?.creditor||"");const [value,setValue]=useState(item?.value||"");const [dueDate,setDueDate]=useState(item?.dueDate||"");const [refMonth,setRefMonth]=useState(item?.refMonth??selMonth);const [refYear,setRefYear]=useState(item?.refYear||selYear);const [groupId,setGroupId]=useState(item?.groupId||groups[0]?.id||"");const [recurring,setRecurring]=useState(item?.recurring||false);const [recurMonths,setRecurMonths]=useState(item?.recurMonths||12);const [paid,setPaid]=useState(item?.paid||false);const [updateFuture,setUpdateFuture]=useState(false);const isEdit=!!item?.id;
-  return(<div style={S.form}><label style={S.label}>Grupo</label><select style={S.input} value={groupId} onChange={e=>setGroupId(e.target.value)}>{groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}</select><label style={S.label}>Descrição *</label><input style={S.input} value={desc} onChange={e=>setDesc(e.target.value)} placeholder="ex: Conta de energia"/><label style={S.label}>Credor</label><input style={S.input} value={creditor} onChange={e=>setCreditor(e.target.value)} placeholder="ex: CEMIG"/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}><div><label style={S.label}>Valor (R$) *</label><input style={S.input} type="number" value={value} onChange={e=>setValue(e.target.value)} placeholder="0,00"/></div><div><label style={S.label}>Data de Vencimento</label><input style={S.input} type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></div></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}><div><label style={S.label}>Mês de Referência</label><select style={S.input} value={refMonth} onChange={e=>setRefMonth(+e.target.value)}>{MONTHS_FULL.map((m,i)=><option key={i} value={i}>{m}</option>)}</select></div><div><label style={S.label}>Ano</label><input style={S.input} type="number" value={refYear} onChange={e=>setRefYear(+e.target.value)} min={2020} max={2099}/></div></div><label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:B.textSub,cursor:"pointer"}}><input type="checkbox" checked={recurring} onChange={e=>setRecurring(e.target.checked)}/><Icon d={ic.repeat} size={14} stroke={B.green}/> Lançar como recorrente</label>{recurring&&(<div style={{background:B.greenPale,borderRadius:10,padding:12}}><label style={{...S.label,color:B.greenDim}}>Repetir por quantos meses?</label><div style={{display:"flex",alignItems:"center",gap:12,marginTop:6}}><input type="range" min={1} max={24} value={recurMonths} onChange={e=>setRecurMonths(+e.target.value)}/><span style={{fontWeight:700,color:B.green,minWidth:60}}>{recurMonths} {recurMonths===1?"mês":"meses"}</span></div><div style={{fontSize:11,color:B.greenDim,marginTop:6}}>💡 Datas e mês de referência avançam automaticamente.</div>{isEdit&&(<label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:B.greenDim,cursor:"pointer",marginTop:10}}><input type="checkbox" checked={updateFuture} onChange={e=>setUpdateFuture(e.target.checked)}/>Atualizar também os meses seguintes</label>)}</div>)}{!recurring&&<label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:B.textSub,cursor:"pointer"}}><input type="checkbox" checked={paid} onChange={e=>setPaid(e.target.checked)}/><Icon d={ic.check} size={14} stroke={B.green}/> Já está pago</label>}<div style={S.formActions}><button style={S.btnSecondary} onClick={onClose}>Cancelar</button><button style={S.btnPrimary} onClick={()=>desc&&value&&onSave({...(item||{}),description:desc,creditor,value:parseFloat(value),dueDate,refMonth,refYear,groupId,recurring,recurMonths,paid:recurring?false:paid,updateFuture,month:item?.month??selMonth,year:item?.year??selYear})}>Salvar</button></div></div>);
+  const [desc,setDesc]=useState(item?.description||"");const [creditor,setCreditor]=useState(item?.creditor||"");const [value,setValue]=useState(item?.value||"");const [dueDate,setDueDate]=useState(item?.dueDate||"");const [refMonth,setRefMonth]=useState(item?.refMonth??selMonth);const [refYear,setRefYear]=useState(item?.refYear||selYear);const [groupId,setGroupId]=useState(item?.groupId||groups[0]?.id||"");const [recurring,setRecurring]=useState(item?.recurring||false);const [recurMonths,setRecurMonths]=useState(item?.recurMonths||12);const [paid,setPaid]=useState(item?.paid||false);const [updateFuture,setUpdateFuture]=useState(false);const [aiSuggestion,setAiSuggestion]=useState(null);const isEdit=!!item?.id;
+
+  const suggestCategory=async(text)=>{
+    if(text.length<4||!groups.length)return;
+    try{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:100,messages:[{role:"user",content:`Categorize esta despesa em um dos grupos: ${groups.map(g=>g.name+"("+g.id+")").join(", ")}. Despesa: "${text}". Responda APENAS com o id do grupo, sem mais nada.`}]})});
+      const data=await res.json();
+      const suggestedId=data.content?.[0]?.text?.trim();
+      const found=groups.find(g=>g.id===suggestedId);
+      if(found&&found.id!==groupId){setAiSuggestion(found);}
+    }catch(e){}
+  };
+
+  useEffect(()=>{const t=setTimeout(()=>{if(desc.length>3)suggestCategory(desc);},"800");return()=>clearTimeout(t);},[desc]);
+  return(<div style={S.form}><label style={S.label}>Grupo</label><select style={S.input} value={groupId} onChange={e=>{setGroupId(e.target.value);setAiSuggestion(null);}}>{groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}</select><label style={S.label}>Descrição *</label><input style={S.input} value={desc} onChange={e=>setDesc(e.target.value)} placeholder="ex: Conta de energia"/>{aiSuggestion&&(<div style={{display:"flex",alignItems:"center",gap:8,background:`${aiSuggestion.color}15`,border:`1px solid ${aiSuggestion.color}40`,borderRadius:10,padding:"8px 12px"}}><Icon d={ic.sparkle} size={13} stroke="#6366f1"/><span style={{fontSize:12,color:B.navy,flex:1}}>IA sugere: <strong>{aiSuggestion.name}</strong></span><button style={{fontSize:11,fontWeight:700,color:aiSuggestion.color,background:"none",border:"none",cursor:"pointer"}} onClick={()=>{setGroupId(aiSuggestion.id);setAiSuggestion(null);}}>Usar ✓</button><button style={{fontSize:11,color:B.textMuted,background:"none",border:"none",cursor:"pointer"}} onClick={()=>setAiSuggestion(null)}>✕</button></div>)}<label style={S.label}>Credor</label><input style={S.input} value={creditor} onChange={e=>setCreditor(e.target.value)} placeholder="ex: CEMIG"/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}><div><label style={S.label}>Valor (R$) *</label><input style={S.input} type="number" value={value} onChange={e=>setValue(e.target.value)} placeholder="0,00"/></div><div><label style={S.label}>Data de Vencimento</label><input style={S.input} type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></div></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}><div><label style={S.label}>Mês de Referência</label><select style={S.input} value={refMonth} onChange={e=>setRefMonth(+e.target.value)}>{MONTHS_FULL.map((m,i)=><option key={i} value={i}>{m}</option>)}</select></div><div><label style={S.label}>Ano</label><input style={S.input} type="number" value={refYear} onChange={e=>setRefYear(+e.target.value)} min={2020} max={2099}/></div></div><label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:B.textSub,cursor:"pointer"}}><input type="checkbox" checked={recurring} onChange={e=>setRecurring(e.target.checked)}/><Icon d={ic.repeat} size={14} stroke={B.green}/> Lançar como recorrente</label>{recurring&&(<div style={{background:B.greenPale,borderRadius:10,padding:12}}><label style={{...S.label,color:B.greenDim}}>Repetir por quantos meses?</label><div style={{display:"flex",alignItems:"center",gap:12,marginTop:6}}><input type="range" min={1} max={24} value={recurMonths} onChange={e=>setRecurMonths(+e.target.value)}/><span style={{fontWeight:700,color:B.green,minWidth:60}}>{recurMonths} {recurMonths===1?"mês":"meses"}</span></div><div style={{fontSize:11,color:B.greenDim,marginTop:6}}>💡 Datas e mês de referência avançam automaticamente.</div>{isEdit&&(<label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:B.greenDim,cursor:"pointer",marginTop:10}}><input type="checkbox" checked={updateFuture} onChange={e=>setUpdateFuture(e.target.checked)}/>Atualizar também os meses seguintes</label>)}</div>)}{!recurring&&<label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:B.textSub,cursor:"pointer"}}><input type="checkbox" checked={paid} onChange={e=>setPaid(e.target.checked)}/><Icon d={ic.check} size={14} stroke={B.green}/> Já está pago</label>}<div style={S.formActions}><button style={S.btnSecondary} onClick={onClose}>Cancelar</button><button style={S.btnPrimary} onClick={()=>desc&&value&&onSave({...(item||{}),description:desc,creditor,value:parseFloat(value),dueDate,refMonth,refYear,groupId,recurring,recurMonths,paid:recurring?false:paid,updateFuture,month:item?.month??selMonth,year:item?.year??selYear})}>Salvar</button></div></div>);
 }
 
 function RevenueForm({revGroups,item,selMonth,selYear,onSave,onClose}){
@@ -821,6 +844,192 @@ function CardForm({item,onSave,onClose}){
 function MilesForm({item,selMonth,selYear,onSave,onClose}){
   const [program,setProgram]=useState(item?.program||"");const [card,setCard]=useState(item?.card||"");const [points,setPoints]=useState(item?.points||"");const [emoji,setEmoji]=useState(item?.emoji||"✈️");
   return(<div style={S.form}><label style={S.label}>Programa *</label><input style={S.input} value={program} onChange={e=>setProgram(e.target.value)} placeholder="ex: Smiles, TudoAzul"/><label style={S.label}>Cartão Vinculado</label><input style={S.input} value={card} onChange={e=>setCard(e.target.value)} placeholder="ex: Nubank Ultravioleta"/><label style={S.label}>Saldo de Pontos *</label><input style={S.input} type="number" value={points} onChange={e=>setPoints(e.target.value)} placeholder="ex: 50000"/><label style={S.label}>Ícone</label><div style={{display:"flex",gap:8}}>{["✈️","🌟","💎","🏆","🎯","🚀"].map(e=><button key={e} onClick={()=>setEmoji(e)} style={{width:44,height:44,borderRadius:10,border:`2px solid ${emoji===e?B.green:B.border}`,background:emoji===e?B.greenPale:B.bg,cursor:"pointer",fontSize:20}}>{e}</button>)}</div><div style={S.formActions}><button style={S.btnSecondary} onClick={onClose}>Cancelar</button><button style={S.btnPrimary} onClick={()=>program&&points&&onSave({...(item||{}),program,card,points:parseInt(points),emoji,month:item?.month??selMonth,year:item?.year??selYear})}>Salvar</button></div></div>);
+}
+
+function AIPanel({onClose,expenses,revenues,groups,revGroups,selMonth,selYear,totalExpenses,totalRevenue,balance,paidExp,receivedRev,savingGoal,members,user,onSaveExpense,onSaveRevenue}){
+  const [messages,setMessages]=useState([{role:"assistant",content:`Olá! 👋 Sou seu assistente financeiro com IA. Posso analisar suas finanças, responder perguntas e até lançar despesas por você!\n\nExemplos:\n• "Como estão minhas finanças em ${MONTHS_FULL[selMonth]}?"\n• "Lançar despesa de energia R$ 280"\n• "Quanto ainda tenho para gastar?"\n• "Me dê um resumo do mês"`}]);
+  const [input,setInput]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [listening,setListening]=useState(false);
+  const [voiceSupported]=useState(()=>"webkitSpeechRecognition" in window||"SpeechRecognition" in window);
+  const messagesEndRef=useState(null);
+  const chatRef={current:null};
+
+  const buildContext=()=>{
+    const monthExp=expenses.filter(e=>e.month===selMonth&&e.year===selYear);
+    const monthRev=revenues.filter(r=>r.month===selMonth&&r.year===selYear);
+    const overdue=monthExp.filter(e=>!e.paid&&e.dueDate&&new Date(e.dueDate)<new Date());
+    const groupSummary=groups.map(g=>({nome:g.name,total:monthExp.filter(e=>e.groupId===g.id).reduce((s,e)=>s+(e.value||0),0)})).filter(g=>g.total>0);
+    return `Dados financeiros de ${MONTHS_FULL[selMonth]}/${selYear}:
+- Receita total: R$ ${totalRevenue.toFixed(2)} (recebido: R$ ${receivedRev.toFixed(2)})
+- Despesas total: R$ ${totalExpenses.toFixed(2)} (pago: R$ ${paidExp.toFixed(2)})
+- Saldo: R$ ${balance.toFixed(2)}
+- Meta de economia: ${savingGoal}% = R$ ${(totalRevenue*savingGoal/100).toFixed(2)}
+- Despesas em atraso: ${overdue.length} lançamento(s)
+- Resumo por grupo: ${JSON.stringify(groupSummary)}
+- Membros da família: ${members.map(m=>m.name).join(", ")}
+- Grupos de despesa disponíveis: ${groups.map(g=>g.name+" (id:"+g.id+")").join(", ")}
+- Categorias de receita disponíveis: ${revGroups.map(g=>g.name+" (id:"+g.id+")").join(", ")}`;
+  };
+
+  const parseAction=async(text)=>{
+    // Try to parse voice/text commands into expense/revenue actions
+    const lower=text.toLowerCase();
+    const valueMatch=text.match(/R?\$?\s*(\d+[.,]?\d*)/);
+    const value=valueMatch?parseFloat(valueMatch[1].replace(",",".")):null;
+
+    if((lower.includes("lançar")||lower.includes("adicionar")||lower.includes("registrar"))&&value){
+      const isRevenue=lower.includes("receita")||lower.includes("salário")||lower.includes("aluguel recebido")||lower.includes("recebimento");
+      if(isRevenue){
+        // Find matching revGroup
+        const rg=revGroups.find(g=>lower.includes(g.name.toLowerCase()))||revGroups[0];
+        const desc=text.replace(/lançar|adicionar|registrar|receita|r\$[\d.,]+/gi,"").trim()||"Receita";
+        return{type:"revenue",data:{description:desc,value,groupId:rg.id,month:selMonth,year:selYear,received:false,recurring:false,authorUid:user.uid,authorName:user.displayName}};
+      } else {
+        const g=groups.find(grp=>lower.includes(grp.name.toLowerCase()))||groups[0];
+        const desc=text.replace(/lançar|adicionar|registrar|despesa|r\$[\d.,]+/gi,"").trim()||"Despesa";
+        return{type:"expense",data:{description:desc,value,groupId:g.id,month:selMonth,year:selYear,paid:false,recurring:false,authorUid:user.uid,authorName:user.displayName}};
+      }
+    }
+    return null;
+  };
+
+  const sendMessage=async(text)=>{
+    if(!text.trim())return;
+    const userMsg={role:"user",content:text};
+    setMessages(prev=>[...prev,userMsg]);
+    setInput("");
+    setLoading(true);
+
+    // Check for action commands first
+    const action=await parseAction(text);
+
+    try{
+      const systemPrompt=`Você é um assistente financeiro inteligente do app Home Finance. Responda sempre em português, de forma clara, objetiva e amigável. Use emojis com moderação. Analise os dados fornecidos e dê insights úteis. Se o usuário pedir para lançar uma despesa ou receita, confirme o que foi registrado.
+
+${buildContext()}
+
+${action?`AÇÃO DETECTADA: O usuário quer ${action.type==="expense"?"registrar uma despesa":"registrar uma receita"}: ${JSON.stringify(action.data)}. Confirme de forma amigável que foi registrado.`:""}`;
+
+      const response=await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          model:"claude-sonnet-4-20250514",
+          max_tokens:1000,
+          system:systemPrompt,
+          messages:[...messages,userMsg].map(m=>({role:m.role,content:m.content}))
+        })
+      });
+      const data=await response.json();
+      const reply=data.content?.[0]?.text||"Desculpe, não consegui processar sua pergunta.";
+
+      // Execute action if detected
+      if(action){
+        if(action.type==="expense") await onSaveExpense(action.data);
+        else await onSaveRevenue(action.data);
+      }
+
+      setMessages(prev=>[...prev,{role:"assistant",content:reply,action}]);
+    }catch(e){
+      setMessages(prev=>[...prev,{role:"assistant",content:"Ops! Ocorreu um erro ao conectar com a IA. Tente novamente."}]);
+    }
+    setLoading(false);
+  };
+
+  const startVoice=()=>{
+    const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SpeechRecognition){alert("Reconhecimento de voz não suportado neste navegador. Use o Chrome.");return;}
+    const recognition=new SpeechRecognition();
+    recognition.lang="pt-BR";
+    recognition.continuous=false;
+    recognition.interimResults=false;
+    recognition.onstart=()=>setListening(true);
+    recognition.onend=()=>setListening(false);
+    recognition.onresult=(e)=>{
+      const transcript=e.results[0][0].transcript;
+      setInput(transcript);
+      setTimeout(()=>sendMessage(transcript),300);
+    };
+    recognition.onerror=()=>setListening(false);
+    recognition.start();
+  };
+
+  const quickActions=[
+    "Como estão minhas finanças esse mês?",
+    "Quanto ainda posso gastar?",
+    "Tenho despesas em atraso?",
+    "Me dê um resumo do mês",
+  ];
+
+  return(
+    <div style={{...S.overlay,alignItems:"flex-end"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{...S.modal,height:"85vh",display:"flex",flexDirection:"column",padding:0,borderRadius:"20px 20px 0 0"}}>
+        {/* Header */}
+        <div style={{background:`linear-gradient(135deg,${B.navyMid},#1a1060)`,padding:"16px 20px",borderRadius:"20px 20px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:36,height:36,borderRadius:10,background:"rgba(99,102,241,.3)",border:"1px solid rgba(99,102,241,.4)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <Icon d={ic.sparkle} size={18} stroke="#a5b4fc"/>
+            </div>
+            <div>
+              <div style={{fontWeight:800,fontSize:15,color:B.white}}>Assistente IA</div>
+              <div style={{fontSize:10,color:"#a5b4fc"}}>Home Finance · {MONTHS_FULL[selMonth]}/{selYear}</div>
+            </div>
+          </div>
+          <button style={{...S.closeBtn,background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.1)"}} onClick={onClose}><Icon d={ic.x} size={16} stroke={B.white}/></button>
+        </div>
+
+        {/* Messages */}
+        <div style={{flex:1,overflowY:"auto",padding:"16px",display:"flex",flexDirection:"column",gap:12}} ref={el=>{if(el)el.scrollTop=el.scrollHeight;}}>
+          {messages.map((m,i)=>(
+            <div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start"}}>
+              <div style={{maxWidth:"82%",padding:"10px 14px",borderRadius:m.role==="user"?"16px 16px 4px 16px":"16px 16px 16px 4px",background:m.role==="user"?B.green:B.bg,color:m.role==="user"?B.navy:B.navy,fontSize:13,lineHeight:1.6,whiteSpace:"pre-wrap",border:m.role==="assistant"?`1px solid ${B.border}`:"none",boxShadow:"0 1px 4px rgba(0,0,0,.06)"}}>
+                {m.role==="assistant"&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,opacity:.6}}><Icon d={ic.sparkle} size={11} stroke="#6366f1"/><span style={{fontSize:10,fontWeight:700,color:"#6366f1"}}>ASSISTENTE IA</span></div>}
+                {m.content}
+                {m.action&&<div style={{marginTop:8,padding:"6px 10px",background:B.green+"22",borderRadius:8,fontSize:11,color:B.greenDim,fontWeight:600}}>✅ {m.action.type==="expense"?"Despesa":"Receita"} registrada automaticamente!</div>}
+              </div>
+            </div>
+          ))}
+          {loading&&(
+            <div style={{display:"flex",justifyContent:"flex-start"}}>
+              <div style={{padding:"10px 16px",background:B.bg,borderRadius:"16px 16px 16px 4px",border:`1px solid ${B.border}`}}>
+                <div style={{display:"flex",gap:4}}>{[0,.2,.4].map((d,i)=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:"#6366f1",animation:`dot-bounce 1.2s ease ${d}s infinite`}}/>)}</div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Quick actions */}
+        {messages.length<=1&&(
+          <div style={{padding:"0 16px 10px",display:"flex",gap:6,flexWrap:"wrap",flexShrink:0}}>
+            {quickActions.map((q,i)=>(
+              <button key={i} style={{padding:"6px 12px",background:B.bg,border:`1px solid ${B.border}`,borderRadius:20,fontSize:11,color:B.textSub,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}} onClick={()=>sendMessage(q)}>{q}</button>
+            ))}
+          </div>
+        )}
+
+        {/* Input */}
+        <div style={{padding:"12px 16px",borderTop:`1px solid ${B.border}`,display:"flex",gap:8,alignItems:"center",flexShrink:0,background:B.bgCard}}>
+          {voiceSupported&&(
+            <button style={{width:42,height:42,borderRadius:12,border:`1.5px solid ${listening?"#ef4444":B.border}`,background:listening?"#fee2e2":B.bg,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,animation:listening?"pulse 1s infinite":"none"}} onClick={startVoice}>
+              <Icon d={ic.mic} size={18} stroke={listening?"#ef4444":B.textMuted}/>
+            </button>
+          )}
+          <input
+            style={{...S.input,flex:1,margin:0}}
+            value={input}
+            onChange={e=>setInput(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&sendMessage(input)}
+            placeholder={listening?"🎤 Ouvindo...":"Pergunte ou dite um comando..."}
+          />
+          <button style={{width:42,height:42,borderRadius:12,background:input.trim()?B.green:B.bg,border:`1.5px solid ${input.trim()?B.green:B.border}`,cursor:input.trim()?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} onClick={()=>sendMessage(input)} disabled={!input.trim()}>
+            <Icon d={ic.send} size={16} stroke={input.trim()?B.navy:B.textMuted}/>
+          </button>
+        </div>
+        <style>{`@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}`}</style>
+      </div>
+    </div>
+  );
 }
 
 const S={
