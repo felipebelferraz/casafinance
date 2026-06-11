@@ -797,18 +797,13 @@ function Modal({onClose,title,children}){return(<div style={S.overlay} onClick={
 function ExpenseForm({groups,item,selMonth,selYear,onSave,onClose}){
   const [desc,setDesc]=useState(item?.description||"");const [creditor,setCreditor]=useState(item?.creditor||"");const [value,setValue]=useState(item?.value||"");const [dueDate,setDueDate]=useState(item?.dueDate||"");const [refMonth,setRefMonth]=useState(item?.refMonth??selMonth);const [refYear,setRefYear]=useState(item?.refYear||selYear);const [groupId,setGroupId]=useState(item?.groupId||groups[0]?.id||"");const [recurring,setRecurring]=useState(item?.recurring||false);const [recurMonths,setRecurMonths]=useState(item?.recurMonths||12);const [paid,setPaid]=useState(item?.paid||false);const [updateFuture,setUpdateFuture]=useState(false);const [aiSuggestion,setAiSuggestion]=useState(null);const isEdit=!!item?.id;
 
-  const suggestCategory=async(text)=>{
+  const suggestCategory=(text)=>{
     if(text.length<4||!groups.length)return;
-    try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:100,messages:[{role:"user",content:`Categorize esta despesa em um dos grupos: ${groups.map(g=>g.name+"("+g.id+")").join(", ")}. Despesa: "${text}". Responda APENAS com o id do grupo, sem mais nada.`}]})});
-      const data=await res.json();
-      const suggestedId=data.content?.[0]?.text?.trim();
-      const found=groups.find(g=>g.id===suggestedId);
-      if(found&&found.id!==groupId){setAiSuggestion(found);}
-    }catch(e){}
+    const found=localCategorize(text,groups);
+    if(found&&found.id!==groupId){setAiSuggestion(found);}
   };
 
-  useEffect(()=>{const t=setTimeout(()=>{if(desc.length>3)suggestCategory(desc);},"800");return()=>clearTimeout(t);},[desc]);
+  useEffect(()=>{const t=setTimeout(()=>{if(desc.length>3)suggestCategory(desc);},600);return()=>clearTimeout(t);},[desc]);
   return(<div style={S.form}><label style={S.label}>Grupo</label><select style={S.input} value={groupId} onChange={e=>{setGroupId(e.target.value);setAiSuggestion(null);}}>{groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}</select><label style={S.label}>Descrição *</label><input style={S.input} value={desc} onChange={e=>setDesc(e.target.value)} placeholder="ex: Conta de energia"/>{aiSuggestion&&(<div style={{display:"flex",alignItems:"center",gap:8,background:`${aiSuggestion.color}15`,border:`1px solid ${aiSuggestion.color}40`,borderRadius:10,padding:"8px 12px"}}><Icon d={ic.sparkle} size={13} stroke="#6366f1"/><span style={{fontSize:12,color:B.navy,flex:1}}>IA sugere: <strong>{aiSuggestion.name}</strong></span><button style={{fontSize:11,fontWeight:700,color:aiSuggestion.color,background:"none",border:"none",cursor:"pointer"}} onClick={()=>{setGroupId(aiSuggestion.id);setAiSuggestion(null);}}>Usar ✓</button><button style={{fontSize:11,color:B.textMuted,background:"none",border:"none",cursor:"pointer"}} onClick={()=>setAiSuggestion(null)}>✕</button></div>)}<label style={S.label}>Credor</label><input style={S.input} value={creditor} onChange={e=>setCreditor(e.target.value)} placeholder="ex: CEMIG"/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}><div><label style={S.label}>Valor (R$) *</label><input style={S.input} type="number" value={value} onChange={e=>setValue(e.target.value)} placeholder="0,00"/></div><div><label style={S.label}>Data de Vencimento</label><input style={S.input} type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></div></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}><div><label style={S.label}>Mês de Referência</label><select style={S.input} value={refMonth} onChange={e=>setRefMonth(+e.target.value)}>{MONTHS_FULL.map((m,i)=><option key={i} value={i}>{m}</option>)}</select></div><div><label style={S.label}>Ano</label><input style={S.input} type="number" value={refYear} onChange={e=>setRefYear(+e.target.value)} min={2020} max={2099}/></div></div><label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:B.textSub,cursor:"pointer"}}><input type="checkbox" checked={recurring} onChange={e=>setRecurring(e.target.checked)}/><Icon d={ic.repeat} size={14} stroke={B.green}/> Lançar como recorrente</label>{recurring&&(<div style={{background:B.greenPale,borderRadius:10,padding:12}}><label style={{...S.label,color:B.greenDim}}>Repetir por quantos meses?</label><div style={{display:"flex",alignItems:"center",gap:12,marginTop:6}}><input type="range" min={1} max={24} value={recurMonths} onChange={e=>setRecurMonths(+e.target.value)}/><span style={{fontWeight:700,color:B.green,minWidth:60}}>{recurMonths} {recurMonths===1?"mês":"meses"}</span></div><div style={{fontSize:11,color:B.greenDim,marginTop:6}}>💡 Datas e mês de referência avançam automaticamente.</div>{isEdit&&(<label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:B.greenDim,cursor:"pointer",marginTop:10}}><input type="checkbox" checked={updateFuture} onChange={e=>setUpdateFuture(e.target.checked)}/>Atualizar também os meses seguintes</label>)}</div>)}{!recurring&&<label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:B.textSub,cursor:"pointer"}}><input type="checkbox" checked={paid} onChange={e=>setPaid(e.target.checked)}/><Icon d={ic.check} size={14} stroke={B.green}/> Já está pago</label>}<div style={S.formActions}><button style={S.btnSecondary} onClick={onClose}>Cancelar</button><button style={S.btnPrimary} onClick={()=>desc&&value&&onSave({...(item||{}),description:desc,creditor,value:parseFloat(value),dueDate,refMonth,refYear,groupId,recurring,recurMonths,paid:recurring?false:paid,updateFuture,month:item?.month??selMonth,year:item?.year??selYear})}>Salvar</button></div></div>);
 }
 
@@ -846,95 +841,139 @@ function MilesForm({item,selMonth,selYear,onSave,onClose}){
   return(<div style={S.form}><label style={S.label}>Programa *</label><input style={S.input} value={program} onChange={e=>setProgram(e.target.value)} placeholder="ex: Smiles, TudoAzul"/><label style={S.label}>Cartão Vinculado</label><input style={S.input} value={card} onChange={e=>setCard(e.target.value)} placeholder="ex: Nubank Ultravioleta"/><label style={S.label}>Saldo de Pontos *</label><input style={S.input} type="number" value={points} onChange={e=>setPoints(e.target.value)} placeholder="ex: 50000"/><label style={S.label}>Ícone</label><div style={{display:"flex",gap:8}}>{["✈️","🌟","💎","🏆","🎯","🚀"].map(e=><button key={e} onClick={()=>setEmoji(e)} style={{width:44,height:44,borderRadius:10,border:`2px solid ${emoji===e?B.green:B.border}`,background:emoji===e?B.greenPale:B.bg,cursor:"pointer",fontSize:20}}>{e}</button>)}</div><div style={S.formActions}><button style={S.btnSecondary} onClick={onClose}>Cancelar</button><button style={S.btnPrimary} onClick={()=>program&&points&&onSave({...(item||{}),program,card,points:parseInt(points),emoji,month:item?.month??selMonth,year:item?.year??selYear})}>Salvar</button></div></div>);
 }
 
+// ─── IA LOCAL (GRATUITA) ──────────────────────────────────────────────────────
+const KEYWORD_MAP={
+  "moradia":["aluguel","condominio","condomínio","iptu","casa","apartamento","reforma","faxina","diarista","limpeza","agua","água","esgoto","internet","wifi","telefone fixo"],
+  "transporte":["combustivel","combustível","gasolina","etanol","alcool","álcool","uber","99","taxi","táxi","onibus","ônibus","metro","metrô","estacionamento","pedagio","pedágio","ipva","seguro carro","manutencao carro","manutenção","oficina","pneu","revisao","revisão","posto"],
+  "saude":["saúde","farmacia","farmácia","remedio","remédio","medico","médico","consulta","exame","dentista","plano de saude","plano de saúde","academia","psicologo","psicólogo","terapia","hospital","laboratorio","laboratório"],
+  "energia":["energia","luz","celpe","cemig","enel","light","coelba","eletricidade","conta de luz"],
+  "alimentacao":["mercado","supermercado","feira","padaria","acougue","açougue","restaurante","lanche","ifood","delivery","pizza","hamburguer","almoço","almoco","jantar","cafe","café","comida"],
+  "educacao":["escola","faculdade","curso","livro","material escolar","mensalidade escolar","universidade","pos","pós","mba"],
+  "lazer":["cinema","show","viagem","passeio","netflix","spotify","disney","hbo","amazon prime","streaming","jogo","game","bar","festa"],
+};
+
+function localCategorize(text,groups){
+  const lower=text.toLowerCase();
+  for(const[key,words]of Object.entries(KEYWORD_MAP)){
+    if(words.some(w=>lower.includes(w))){
+      const found=groups.find(g=>g.name.toLowerCase().includes(key)||key.includes(g.name.toLowerCase().slice(0,5)));
+      if(found)return found;
+    }
+  }
+  // fallback: match group name directly
+  return groups.find(g=>lower.includes(g.name.toLowerCase()))||null;
+}
+
+function parseValueBR(text){
+  // captura "680", "680,50", "1.680,50", "R$ 680"
+  const m=text.replace(/\./g,"").match(/(\d+)[,]?(\d{0,2})/);
+  if(!m)return null;
+  return parseFloat(m[1]+"."+(m[2]||"0"));
+}
+
+function parseMonthBR(text){
+  const lower=text.toLowerCase();
+  const idx=MONTHS_FULL.findIndex(m=>lower.includes(m.toLowerCase()));
+  return idx>=0?idx:null;
+}
+
 function AIPanel({onClose,expenses,revenues,groups,revGroups,selMonth,selYear,totalExpenses,totalRevenue,balance,paidExp,receivedRev,savingGoal,members,user,onSaveExpense,onSaveRevenue}){
-  const [messages,setMessages]=useState([{role:"assistant",content:`Olá! 👋 Sou seu assistente financeiro com IA. Posso analisar suas finanças, responder perguntas e até lançar despesas por você!\n\nExemplos:\n• "Como estão minhas finanças em ${MONTHS_FULL[selMonth]}?"\n• "Lançar despesa de energia R$ 280"\n• "Quanto ainda tenho para gastar?"\n• "Me dê um resumo do mês"`}]);
+  const [messages,setMessages]=useState([{role:"assistant",content:`Olá! 👋 Sou o assistente do Home Finance!\n\nPosso responder sobre suas finanças e lançar despesas/receitas por voz ou texto.\n\nExemplos:\n• "Como estão minhas finanças?"\n• "Lançar despesa de energia 680 reais"\n• "Receita de aluguel 525 reais"\n• "Quanto posso gastar?"\n• "Tenho contas em atraso?"`}]);
   const [input,setInput]=useState("");
-  const [loading,setLoading]=useState(false);
   const [listening,setListening]=useState(false);
   const [voiceSupported]=useState(()=>"webkitSpeechRecognition" in window||"SpeechRecognition" in window);
-  const messagesEndRef=useState(null);
-  const chatRef={current:null};
 
-  const buildContext=()=>{
-    const monthExp=expenses.filter(e=>e.month===selMonth&&e.year===selYear);
-    const monthRev=revenues.filter(r=>r.month===selMonth&&r.year===selYear);
-    const overdue=monthExp.filter(e=>!e.paid&&e.dueDate&&new Date(e.dueDate)<new Date());
-    const groupSummary=groups.map(g=>({nome:g.name,total:monthExp.filter(e=>e.groupId===g.id).reduce((s,e)=>s+(e.value||0),0)})).filter(g=>g.total>0);
-    return `Dados financeiros de ${MONTHS_FULL[selMonth]}/${selYear}:
-- Receita total: R$ ${totalRevenue.toFixed(2)} (recebido: R$ ${receivedRev.toFixed(2)})
-- Despesas total: R$ ${totalExpenses.toFixed(2)} (pago: R$ ${paidExp.toFixed(2)})
-- Saldo: R$ ${balance.toFixed(2)}
-- Meta de economia: ${savingGoal}% = R$ ${(totalRevenue*savingGoal/100).toFixed(2)}
-- Despesas em atraso: ${overdue.length} lançamento(s)
-- Resumo por grupo: ${JSON.stringify(groupSummary)}
-- Membros da família: ${members.map(m=>m.name).join(", ")}
-- Grupos de despesa disponíveis: ${groups.map(g=>g.name+" (id:"+g.id+")").join(", ")}
-- Categorias de receita disponíveis: ${revGroups.map(g=>g.name+" (id:"+g.id+")").join(", ")}`;
-  };
+  const monthExp=expenses.filter(e=>e.month===selMonth&&e.year===selYear);
+  const monthRev=revenues.filter(r=>r.month===selMonth&&r.year===selYear);
 
-  const parseAction=async(text)=>{
-    // Try to parse voice/text commands into expense/revenue actions
+  const answerQuestion=(text)=>{
     const lower=text.toLowerCase();
-    const valueMatch=text.match(/R?\$?\s*(\d+[.,]?\d*)/);
-    const value=valueMatch?parseFloat(valueMatch[1].replace(",",".")):null;
 
-    if((lower.includes("lançar")||lower.includes("adicionar")||lower.includes("registrar"))&&value){
-      const isRevenue=lower.includes("receita")||lower.includes("salário")||lower.includes("aluguel recebido")||lower.includes("recebimento");
+    // Lançamento de despesa/receita
+    if(lower.includes("lançar")||lower.includes("lancar")||lower.includes("adicionar")||lower.includes("registrar")){
+      const value=parseValueBR(text);
+      if(!value)return{content:"Não consegui identificar o valor. 🤔 Tente algo como: \"Lançar despesa de energia 680 reais\""};
+      const targetMonth=parseMonthBR(text)??selMonth;
+      const isRevenue=lower.includes("receita")||lower.includes("recebimento")||lower.includes("recebi ");
       if(isRevenue){
-        // Find matching revGroup
         const rg=revGroups.find(g=>lower.includes(g.name.toLowerCase()))||revGroups[0];
-        const desc=text.replace(/lançar|adicionar|registrar|receita|r\$[\d.,]+/gi,"").trim()||"Receita";
-        return{type:"revenue",data:{description:desc,value,groupId:rg.id,month:selMonth,year:selYear,received:false,recurring:false,authorUid:user.uid,authorName:user.displayName}};
+        const desc=text.replace(/lançar|lancar|adicionar|registrar|receita|de|r\$|reais|[\d.,]+/gi," ").replace(/\s+/g," ").trim()||"Receita";
+        const descCap=desc.charAt(0).toUpperCase()+desc.slice(1);
+        const data={description:descCap,value,groupId:rg.id,month:targetMonth,year:selYear,received:false,recurring:false,authorUid:user.uid,authorName:user.displayName,source:""};
+        onSaveRevenue(data);
+        return{content:`✅ Receita registrada!\n\n📝 ${descCap}\n💰 ${fmt(value)}\n📅 ${MONTHS_FULL[targetMonth]}/${selYear}\n🏷️ ${rg.name}`,action:true};
       } else {
-        const g=groups.find(grp=>lower.includes(grp.name.toLowerCase()))||groups[0];
-        const desc=text.replace(/lançar|adicionar|registrar|despesa|r\$[\d.,]+/gi,"").trim()||"Despesa";
-        return{type:"expense",data:{description:desc,value,groupId:g.id,month:selMonth,year:selYear,paid:false,recurring:false,authorUid:user.uid,authorName:user.displayName}};
+        const g=localCategorize(text,groups)||groups[0];
+        const desc=text.replace(/lançar|lancar|adicionar|registrar|despesa|de|r\$|reais|em janeiro|em fevereiro|em março|em abril|em maio|em junho|em julho|em agosto|em setembro|em outubro|em novembro|em dezembro|[\d.,]+/gi," ").replace(/\s+/g," ").trim()||"Despesa";
+        const descCap=desc.charAt(0).toUpperCase()+desc.slice(1);
+        const data={description:descCap,value,groupId:g.id,month:targetMonth,year:selYear,paid:false,recurring:false,authorUid:user.uid,authorName:user.displayName,creditor:"",refMonth:targetMonth,refYear:selYear};
+        onSaveExpense(data);
+        return{content:`✅ Despesa registrada!\n\n📝 ${descCap}\n💰 ${fmt(value)}\n📅 ${MONTHS_FULL[targetMonth]}/${selYear}\n🏷️ ${g.name} (categorizado automaticamente)`,action:true};
       }
     }
-    return null;
+
+    // Perguntas sobre finanças
+    if(lower.includes("finanças")||lower.includes("financas")||lower.includes("resumo")||lower.includes("como est")){
+      const overdue=monthExp.filter(e=>!e.paid&&e.dueDate&&new Date(e.dueDate)<TODAY).length;
+      const status=balance>=0?"✅ No azul!":"⚠️ No vermelho!";
+      return{content:`📊 Resumo de ${MONTHS_FULL[selMonth]}/${selYear}:\n\n💰 Receitas: ${fmt(totalRevenue)}\n   └ Recebido: ${fmt(receivedRev)}\n\n💸 Despesas: ${fmt(totalExpenses)}\n   └ Pago: ${fmt(paidExp)}\n\n${status} Saldo: ${fmt(balance)}\n\n🎯 Meta de economia (${savingGoal}%): ${fmt(totalRevenue*savingGoal/100)}\n${balance>=totalRevenue*savingGoal/100?"✅ Meta atingida!":"⏳ Faltam "+fmt(totalRevenue*savingGoal/100-balance)}\n${overdue>0?`\n🔴 Atenção: ${overdue} conta(s) em atraso!`:""}`};
+    }
+
+    if(lower.includes("quanto")&&(lower.includes("gastar")||lower.includes("sobra")||lower.includes("disponivel")||lower.includes("disponível"))){
+      const target=totalRevenue*savingGoal/100;
+      const available=balance-target;
+      return{content:available>0
+        ?`💚 Você ainda pode gastar ${fmt(available)} mantendo sua meta de economia de ${savingGoal}%.\n\nSaldo atual: ${fmt(balance)}\nReserva da meta: ${fmt(target)}`
+        :`⚠️ Cuidado! Seu saldo atual (${fmt(balance)}) já está ${balance<0?"negativo":"abaixo da meta de economia de "+fmt(target)}.\n\nRecomendo evitar novos gastos este mês.`};
+    }
+
+    if(lower.includes("atraso")||lower.includes("vencid")||lower.includes("atrasad")){
+      const overdueExp=monthExp.filter(e=>!e.paid&&e.dueDate&&new Date(e.dueDate)<TODAY);
+      const overdueRev=monthRev.filter(r=>!r.received&&r.expectedDate&&new Date(r.expectedDate)<TODAY);
+      if(overdueExp.length===0&&overdueRev.length===0)return{content:"✅ Ótima notícia! Você não tem nenhuma conta em atraso. Tudo em dia! 🎉"};
+      let msg="🔴 Lançamentos em atraso:\n";
+      if(overdueExp.length>0){msg+=`\n💸 Despesas (${overdueExp.length}):\n`+overdueExp.map(e=>`• ${e.description} — ${fmt(e.value)} (venceu ${e.dueDate})`).join("\n");}
+      if(overdueRev.length>0){msg+=`\n\n💰 Receitas (${overdueRev.length}):\n`+overdueRev.map(r=>`• ${r.description} — ${fmt(r.value)} (previsto ${r.expectedDate})`).join("\n");}
+      return{content:msg};
+    }
+
+    if(lower.includes("maior")&&(lower.includes("gasto")||lower.includes("despesa"))){
+      if(monthExp.length===0)return{content:"Você ainda não tem despesas lançadas este mês."};
+      const sorted=[...monthExp].sort((a,b)=>(b.value||0)-(a.value||0)).slice(0,5);
+      return{content:`💸 Maiores despesas de ${MONTHS_FULL[selMonth]}:\n\n`+sorted.map((e,i)=>`${i+1}. ${e.description} — ${fmt(e.value)}`).join("\n")};
+    }
+
+    if(lower.includes("grupo")||lower.includes("categoria")){
+      const byG=groups.map(g=>({name:g.name,total:monthExp.filter(e=>e.groupId===g.id).reduce((s,e)=>s+(e.value||0),0)})).filter(g=>g.total>0).sort((a,b)=>b.total-a.total);
+      if(byG.length===0)return{content:"Sem despesas lançadas este mês ainda."};
+      return{content:`📂 Gastos por grupo em ${MONTHS_FULL[selMonth]}:\n\n`+byG.map(g=>`• ${g.name}: ${fmt(g.total)} (${pct(g.total,totalExpenses)}%)`).join("\n")};
+    }
+
+    if(lower.includes("previsão")||lower.includes("previsao")||lower.includes("projeção")||lower.includes("projecao")||lower.includes("fechar o mês")||lower.includes("fechar o mes")){
+      const dayOfMonth=TODAY.getDate();
+      const daysInMonth=new Date(selYear,selMonth+1,0).getDate();
+      if(selMonth!==CURRENT_MONTH||selYear!==CURRENT_YEAR)return{content:`A projeção funciona apenas para o mês atual. O saldo de ${MONTHS_FULL[selMonth]} é ${fmt(balance)}.`};
+      const dailyRate=paidExp/Math.max(dayOfMonth,1);
+      const projected=dailyRate*daysInMonth;
+      const projBalance=totalRevenue-projected;
+      return{content:`🔮 Projeção para o fim de ${MONTHS_FULL[selMonth]}:\n\nGasto médio diário: ${fmt(dailyRate)}\nProjeção de despesas: ${fmt(projected)}\nSaldo projetado: ${fmt(projBalance)}\n\n${projBalance>=0?"✅ Tendência positiva!":"⚠️ Atenção: tendência de fechar no vermelho!"}\n\n💡 Baseado no seu ritmo de pagamentos até hoje (dia ${dayOfMonth}).`};
+    }
+
+    if(lower.includes("oi")||lower.includes("olá")||lower.includes("ola")||lower.includes("bom dia")||lower.includes("boa tarde")||lower.includes("boa noite")){
+      return{content:`Olá, ${user.displayName?.split(" ")[0]}! 😊 Como posso ajudar com suas finanças hoje?`};
+    }
+
+    return{content:`Hmm, não entendi muito bem. 🤔 Posso ajudar com:\n\n• "Como estão minhas finanças?"\n• "Lançar despesa de [descrição] [valor] reais"\n• "Receita de [descrição] [valor] reais"\n• "Quanto posso gastar?"\n• "Tenho contas em atraso?"\n• "Maiores gastos do mês"\n• "Gastos por grupo"\n• "Previsão do mês"`};
   };
 
-  const sendMessage=async(text)=>{
+  const sendMessage=(text)=>{
     if(!text.trim())return;
-    const userMsg={role:"user",content:text};
-    setMessages(prev=>[...prev,userMsg]);
+    setMessages(prev=>[...prev,{role:"user",content:text}]);
     setInput("");
-    setLoading(true);
-
-    // Check for action commands first
-    const action=await parseAction(text);
-
-    try{
-      const systemPrompt=`Você é um assistente financeiro inteligente do app Home Finance. Responda sempre em português, de forma clara, objetiva e amigável. Use emojis com moderação. Analise os dados fornecidos e dê insights úteis. Se o usuário pedir para lançar uma despesa ou receita, confirme o que foi registrado.
-
-${buildContext()}
-
-${action?`AÇÃO DETECTADA: O usuário quer ${action.type==="expense"?"registrar uma despesa":"registrar uma receita"}: ${JSON.stringify(action.data)}. Confirme de forma amigável que foi registrado.`:""}`;
-
-      const response=await fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          model:"claude-sonnet-4-20250514",
-          max_tokens:1000,
-          system:systemPrompt,
-          messages:[...messages,userMsg].map(m=>({role:m.role,content:m.content}))
-        })
-      });
-      const data=await response.json();
-      const reply=data.content?.[0]?.text||"Desculpe, não consegui processar sua pergunta.";
-
-      // Execute action if detected
-      if(action){
-        if(action.type==="expense") await onSaveExpense(action.data);
-        else await onSaveRevenue(action.data);
-      }
-
-      setMessages(prev=>[...prev,{role:"assistant",content:reply,action}]);
-    }catch(e){
-      setMessages(prev=>[...prev,{role:"assistant",content:"Ops! Ocorreu um erro ao conectar com a IA. Tente novamente."}]);
-    }
-    setLoading(false);
+    setTimeout(()=>{
+      const reply=answerQuestion(text);
+      setMessages(prev=>[...prev,{role:"assistant",content:reply.content,action:reply.action}]);
+    },400);
   };
 
   const startVoice=()=>{
@@ -955,51 +994,35 @@ ${action?`AÇÃO DETECTADA: O usuário quer ${action.type==="expense"?"registrar
     recognition.start();
   };
 
-  const quickActions=[
-    "Como estão minhas finanças esse mês?",
-    "Quanto ainda posso gastar?",
-    "Tenho despesas em atraso?",
-    "Me dê um resumo do mês",
-  ];
+  const quickActions=["Como estão minhas finanças?","Quanto posso gastar?","Tenho contas em atraso?","Previsão do mês"];
 
   return(
     <div style={{...S.overlay,alignItems:"flex-end"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div style={{...S.modal,height:"85vh",display:"flex",flexDirection:"column",padding:0,borderRadius:"20px 20px 0 0"}}>
-        {/* Header */}
-        <div style={{background:`linear-gradient(135deg,${B.navyMid},#1a1060)`,padding:"16px 20px",borderRadius:"20px 20px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <div style={{background:`linear-gradient(135deg,#0A2540,#1a1060)`,padding:"16px 20px",borderRadius:"20px 20px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <div style={{width:36,height:36,borderRadius:10,background:"rgba(99,102,241,.3)",border:"1px solid rgba(99,102,241,.4)",display:"flex",alignItems:"center",justifyContent:"center"}}>
               <Icon d={ic.sparkle} size={18} stroke="#a5b4fc"/>
             </div>
             <div>
-              <div style={{fontWeight:800,fontSize:15,color:B.white}}>Assistente IA</div>
+              <div style={{fontWeight:800,fontSize:15,color:"#FFFFFF"}}>Assistente IA</div>
               <div style={{fontSize:10,color:"#a5b4fc"}}>Home Finance · {MONTHS_FULL[selMonth]}/{selYear}</div>
             </div>
           </div>
-          <button style={{...S.closeBtn,background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.1)"}} onClick={onClose}><Icon d={ic.x} size={16} stroke={B.white}/></button>
+          <button style={{...S.closeBtn,background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.1)"}} onClick={onClose}><Icon d={ic.x} size={16} stroke="#FFFFFF"/></button>
         </div>
 
-        {/* Messages */}
         <div style={{flex:1,overflowY:"auto",padding:"16px",display:"flex",flexDirection:"column",gap:12}} ref={el=>{if(el)el.scrollTop=el.scrollHeight;}}>
           {messages.map((m,i)=>(
             <div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start"}}>
-              <div style={{maxWidth:"82%",padding:"10px 14px",borderRadius:m.role==="user"?"16px 16px 4px 16px":"16px 16px 16px 4px",background:m.role==="user"?B.green:B.bg,color:m.role==="user"?B.navy:B.navy,fontSize:13,lineHeight:1.6,whiteSpace:"pre-wrap",border:m.role==="assistant"?`1px solid ${B.border}`:"none",boxShadow:"0 1px 4px rgba(0,0,0,.06)"}}>
-                {m.role==="assistant"&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,opacity:.6}}><Icon d={ic.sparkle} size={11} stroke="#6366f1"/><span style={{fontSize:10,fontWeight:700,color:"#6366f1"}}>ASSISTENTE IA</span></div>}
+              <div style={{maxWidth:"82%",padding:"10px 14px",borderRadius:m.role==="user"?"16px 16px 4px 16px":"16px 16px 16px 4px",background:m.role==="user"?B.green:B.bg,color:B.navy,fontSize:13,lineHeight:1.6,whiteSpace:"pre-wrap",border:m.role==="assistant"?`1px solid ${B.border}`:"none",boxShadow:"0 1px 4px rgba(0,0,0,.06)"}}>
+                {m.role==="assistant"&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,opacity:.6}}><Icon d={ic.sparkle} size={11} stroke="#6366f1"/><span style={{fontSize:10,fontWeight:700,color:"#6366f1"}}>ASSISTENTE</span></div>}
                 {m.content}
-                {m.action&&<div style={{marginTop:8,padding:"6px 10px",background:B.green+"22",borderRadius:8,fontSize:11,color:B.greenDim,fontWeight:600}}>✅ {m.action.type==="expense"?"Despesa":"Receita"} registrada automaticamente!</div>}
               </div>
             </div>
           ))}
-          {loading&&(
-            <div style={{display:"flex",justifyContent:"flex-start"}}>
-              <div style={{padding:"10px 16px",background:B.bg,borderRadius:"16px 16px 16px 4px",border:`1px solid ${B.border}`}}>
-                <div style={{display:"flex",gap:4}}>{[0,.2,.4].map((d,i)=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:"#6366f1",animation:`dot-bounce 1.2s ease ${d}s infinite`}}/>)}</div>
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* Quick actions */}
         {messages.length<=1&&(
           <div style={{padding:"0 16px 10px",display:"flex",gap:6,flexWrap:"wrap",flexShrink:0}}>
             {quickActions.map((q,i)=>(
@@ -1008,20 +1031,13 @@ ${action?`AÇÃO DETECTADA: O usuário quer ${action.type==="expense"?"registrar
           </div>
         )}
 
-        {/* Input */}
-        <div style={{padding:"12px 16px",borderTop:`1px solid ${B.border}`,display:"flex",gap:8,alignItems:"center",flexShrink:0,background:B.bgCard}}>
+        <div style={{padding:"12px 16px",borderTop:`1px solid ${B.border}`,display:"flex",gap:8,alignItems:"center",flexShrink:0,background:"#FFFFFF"}}>
           {voiceSupported&&(
             <button style={{width:42,height:42,borderRadius:12,border:`1.5px solid ${listening?"#ef4444":B.border}`,background:listening?"#fee2e2":B.bg,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,animation:listening?"pulse 1s infinite":"none"}} onClick={startVoice}>
               <Icon d={ic.mic} size={18} stroke={listening?"#ef4444":B.textMuted}/>
             </button>
           )}
-          <input
-            style={{...S.input,flex:1,margin:0}}
-            value={input}
-            onChange={e=>setInput(e.target.value)}
-            onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&sendMessage(input)}
-            placeholder={listening?"🎤 Ouvindo...":"Pergunte ou dite um comando..."}
-          />
+          <input style={{...S.input,flex:1,margin:0}} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&sendMessage(input)} placeholder={listening?"🎤 Ouvindo...":"Pergunte ou dite um comando..."}/>
           <button style={{width:42,height:42,borderRadius:12,background:input.trim()?B.green:B.bg,border:`1.5px solid ${input.trim()?B.green:B.border}`,cursor:input.trim()?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} onClick={()=>sendMessage(input)} disabled={!input.trim()}>
             <Icon d={ic.send} size={16} stroke={input.trim()?B.navy:B.textMuted}/>
           </button>
