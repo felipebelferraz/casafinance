@@ -400,17 +400,60 @@ function Dashboard({user,familyId,theme,setTheme}){
   const isExpenseOverdue=(item)=>{if(item.paid)return false;if(item.dueDate){const d=new Date(item.dueDate);return d<TODAY;}if(item.dueDay&&item.month===CURRENT_MONTH&&item.year===CURRENT_YEAR)return item.dueDay<TODAY.getDate();if(item.month<CURRENT_MONTH&&item.year<=CURRENT_YEAR)return true;return false;};
   const isRevenueOverdue=(item)=>{if(item.received)return false;if(item.expectedDate){const d=new Date(item.expectedDate);return d<TODAY;}if(item.month<CURRENT_MONTH&&item.year<=CURRENT_YEAR)return true;return false;};
 
-  const togglePaid=async(id)=>{const item=expenses.find(e=>e.id===id);await setDoc(doc(db,`${base}/expenses`,id),{...item,paid:!item.paid});};
+  const togglePaid=async(id)=>{
+    const item=expenses.find(e=>e.id===id);
+    const nowPaid=!item.paid;
+    await setDoc(doc(db,`${base}/expenses`,id),{...item,paid:nowPaid});
+    // Sincroniza limite do cartão vinculado
+    const cardGroup=groups.find(g=>g.id===item.groupId);
+    const isCardGroup=cardGroup&&cardGroup.name.toLowerCase().includes("cart");
+    if(isCardGroup){
+      const linkedCard=cards.find(c=>c.name===item.description);
+      if(linkedCard){
+        const newUsed=nowPaid?0:item.value||0;
+        await setDoc(doc(db,`${base}/cards`,linkedCard.id),{...linkedCard,used:newUsed});
+      }
+    }
+  };
   const deleteExpense=async(id)=>{await deleteDoc(doc(db,`${base}/expenses`,id));notify("Despesa removida");};
 
   const saveExpense=async(data)=>{
     const months=data.recurring?parseInt(data.recurMonths||12):1;
     if(data.id){
+      // Atualiza o cartão vinculado automaticamente se for grupo de cartões
+      const cardGroup=groups.find(g=>g.id===data.groupId);
+      const isCardGroup=cardGroup&&cardGroup.name.toLowerCase().includes("cart");
+      if(isCardGroup){
+        const linkedCard=cards.find(c=>c.name===data.description);
+        if(linkedCard){await setDoc(doc(db,`${base}/cards`,linkedCard.id),{...linkedCard,used:parseFloat(data.value)||0});}
+      }
       await setDoc(doc(db,`${base}/expenses`,data.id),{...data,authorUid:data.authorUid||user.uid,authorName:data.authorName||user.displayName});
       if(data.recurring&&data.updateFuture){
         const futureItems=expenses.filter(e=>e.description===data.description&&e.groupId===data.groupId&&e.id!==data.id&&(e.year>data.year||(e.year===data.year&&e.month>data.month)));
-        for(const fi of futureItems){await setDoc(doc(db,`${base}/expenses`,fi.id),{...fi,value:data.value,creditor:data.creditor,groupId:data.groupId});}
+        for(const fi of futureItems){await setDoc(doc(db,`${base}/expenses`,fi.id),{...fi,value:data.value,creditor:data.creditor,groupId:data.groupId,recurring:true});}
         notify(`Despesa atualizada em ${futureItems.length+1} meses!`);
+      } else if(data.recurring&&data.generateFuture){
+        // Nova lógica: gerar meses futuros ao marcar recorrente em edição
+        const startMonth=data.month+1;
+        const startYear=data.year;
+        const totalMonths=parseInt(data.recurMonths||12);
+        let created=0;
+        for(let i=0;i<totalMonths-1;i++){
+          let m=startMonth+i;let y=startYear;
+          if(m>11){m-=12;y+=1;}
+          // Só cria se não existir lançamento igual nesse mês
+          const exists=expenses.find(e=>e.description===data.description&&e.groupId===data.groupId&&e.month===m&&e.year===y);
+          if(!exists){
+            const id=`exp_${Date.now()}_${i}`;
+            let dueDate=data.dueDate;
+            if(data.dueDate){const d=new Date(data.dueDate);d.setMonth(d.getMonth()+i+1);dueDate=d.toISOString().slice(0,10);}
+            const refMonth=(data.refMonth+i+1)%12;
+            const refYear=data.refYear+Math.floor((data.refMonth+i+1)/12);
+            await setDoc(doc(db,`${base}/expenses`,id),{...data,id,month:m,year:y,paid:false,dueDate,refMonth,refYear,authorUid:user.uid,authorName:user.displayName});
+            created++;
+          }
+        }
+        notify(`Recorrência criada para ${created} meses futuros!`);
       } else notify("Despesa atualizada!");
     } else {
       for(let i=0;i<months;i++){
@@ -668,7 +711,7 @@ function Dashboard({user,familyId,theme,setTheme}){
             {groups.map(g=>{const items=monthExpenses.filter(e=>e.groupId===g.id);if(items.length===0)return null;return <GroupSection key={g.id} group={g} items={items} total={items.reduce((s,e)=>s+(e.value||0),0)} onToggle={togglePaid} onEdit={item=>{setEditItem(item);setShowForm(true);}} onDelete={deleteExpense} onDeleteGroup={deleteGroup} onEditGroup={g=>{setEditGroup(g);setShowGroupForm(true);}} isOverdue={isExpenseOverdue}/>;
             })}
             {monthExpenses.length===0&&<div style={S.emptyState}><div style={{fontSize:48}}>📂</div><div style={{color:B.textMuted,fontSize:14}}>Nenhuma despesa em {MONTHS_FULL[selMonth]}</div><button style={S.btnPrimary} onClick={()=>setShowForm(true)}>Adicionar primeira despesa</button></div>}
-            {showForm&&<Modal onClose={()=>{setShowForm(false);setEditItem(null);}} title={editItem?"Editar Despesa":"Nova Despesa"}><ExpenseForm groups={groups} item={editItem} selMonth={selMonth} selYear={selYear} onSave={saveExpense} onClose={()=>{setShowForm(false);setEditItem(null);}}/></Modal>}
+            {showForm&&<Modal onClose={()=>{setShowForm(false);setEditItem(null);}} title={editItem?"Editar Despesa":"Nova Despesa"}><ExpenseForm groups={groups} cards={cards} item={editItem} selMonth={selMonth} selYear={selYear} onSave={saveExpense} onClose={()=>{setShowForm(false);setEditItem(null);}}/></Modal>}
             {showGroupForm&&<Modal onClose={()=>{setShowGroupForm(false);setEditGroup(null);}} title={editGroup?"Editar Grupo":"Novo Grupo"}><GroupForm item={editGroup} onSave={saveGroup} onClose={()=>{setShowGroupForm(false);setEditGroup(null);}}/></Modal>}
           </div>
         )}
@@ -840,8 +883,10 @@ function ExpenseRow({item,onToggle,onEdit,onDelete,isOverdue}){
 
 function Modal({onClose,title,children}){return(<div style={S.overlay} onClick={e=>e.target===e.currentTarget&&onClose()}><div style={S.modal}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}><span style={{fontWeight:700,fontSize:16,color:B.text}}>{title}</span><button style={S.closeBtn} onClick={onClose}><Icon d={ic.x} size={16} stroke={B.textSub}/></button></div>{children}</div></div>);}
 
-function ExpenseForm({groups,item,selMonth,selYear,onSave,onClose}){
-  const [desc,setDesc]=useState(item?.description||"");const [creditor,setCreditor]=useState(item?.creditor||"");const [value,setValue]=useState(item?.value||"");const [dueDate,setDueDate]=useState(item?.dueDate||"");const [refMonth,setRefMonth]=useState(item?.refMonth??selMonth);const [refYear,setRefYear]=useState(item?.refYear||selYear);const [groupId,setGroupId]=useState(item?.groupId||groups[0]?.id||"");const [recurring,setRecurring]=useState(item?.recurring||false);const [recurMonths,setRecurMonths]=useState(item?.recurMonths||12);const [paid,setPaid]=useState(item?.paid||false);const [updateFuture,setUpdateFuture]=useState(false);const [aiSuggestion,setAiSuggestion]=useState(null);const isEdit=!!item?.id;
+function ExpenseForm({groups,item,selMonth,selYear,onSave,onClose,cards}){
+  const [desc,setDesc]=useState(item?.description||"");const [creditor,setCreditor]=useState(item?.creditor||"");const [value,setValue]=useState(item?.value||"");const [dueDate,setDueDate]=useState(item?.dueDate||"");const [refMonth,setRefMonth]=useState(item?.refMonth??selMonth);const [refYear,setRefYear]=useState(item?.refYear||selYear);const [groupId,setGroupId]=useState(item?.groupId||groups[0]?.id||"");const [recurring,setRecurring]=useState(item?.recurring||false);const [recurMonths,setRecurMonths]=useState(item?.recurMonths||12);const [paid,setPaid]=useState(item?.paid||false);const [updateFuture,setUpdateFuture]=useState(false);const [generateFuture,setGenerateFuture]=useState(false);const [aiSuggestion,setAiSuggestion]=useState(null);const isEdit=!!item?.id;
+  const selectedGroup=groups.find(g=>g.id===groupId);
+  const isCardGroup=selectedGroup&&selectedGroup.name.toLowerCase().includes("cart");
 
   const suggestCategory=(text)=>{
     if(text.length<4||!groups.length)return;
@@ -850,7 +895,7 @@ function ExpenseForm({groups,item,selMonth,selYear,onSave,onClose}){
   };
 
   useEffect(()=>{const t=setTimeout(()=>{if(desc.length>3)suggestCategory(desc);},600);return()=>clearTimeout(t);},[desc]);
-  return(<div style={S.form}><label style={S.label}>Grupo</label><select style={S.input} value={groupId} onChange={e=>{setGroupId(e.target.value);setAiSuggestion(null);}}>{groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}</select><label style={S.label}>Descrição *</label><input style={S.input} value={desc} onChange={e=>setDesc(e.target.value)} placeholder="ex: Conta de energia"/>{aiSuggestion&&(<div style={{display:"flex",alignItems:"center",gap:8,background:`${aiSuggestion.color}15`,border:`1px solid ${aiSuggestion.color}40`,borderRadius:10,padding:"8px 12px"}}><Icon d={ic.sparkle} size={13} stroke="#6366f1"/><span style={{fontSize:12,color:B.text,flex:1}}>IA sugere: <strong>{aiSuggestion.name}</strong></span><button style={{fontSize:11,fontWeight:700,color:aiSuggestion.color,background:"none",border:"none",cursor:"pointer"}} onClick={()=>{setGroupId(aiSuggestion.id);setAiSuggestion(null);}}>Usar ✓</button><button style={{fontSize:11,color:B.textMuted,background:"none",border:"none",cursor:"pointer"}} onClick={()=>setAiSuggestion(null)}>✕</button></div>)}<label style={S.label}>Credor</label><input style={S.input} value={creditor} onChange={e=>setCreditor(e.target.value)} placeholder="ex: CEMIG"/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}><div><label style={S.label}>Valor (R$) *</label><input style={S.input} type="number" value={value} onChange={e=>setValue(e.target.value)} placeholder="0,00"/></div><div><label style={S.label}>Data de Vencimento</label><input style={S.input} type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></div></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}><div><label style={S.label}>Mês de Referência</label><select style={S.input} value={refMonth} onChange={e=>setRefMonth(+e.target.value)}>{MONTHS_FULL.map((m,i)=><option key={i} value={i}>{m}</option>)}</select></div><div><label style={S.label}>Ano</label><input style={S.input} type="number" value={refYear} onChange={e=>setRefYear(+e.target.value)} min={2020} max={2099}/></div></div><label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:B.textSub,cursor:"pointer"}}><input type="checkbox" checked={recurring} onChange={e=>setRecurring(e.target.checked)}/><Icon d={ic.repeat} size={14} stroke={B.green}/> Lançar como recorrente</label>{recurring&&(<div style={{background:B.greenPale,borderRadius:10,padding:12}}><label style={{...S.label,color:B.greenDim}}>Repetir por quantos meses?</label><div style={{display:"flex",alignItems:"center",gap:12,marginTop:6}}><input type="range" min={1} max={24} value={recurMonths} onChange={e=>setRecurMonths(+e.target.value)}/><span style={{fontWeight:700,color:B.green,minWidth:60}}>{recurMonths} {recurMonths===1?"mês":"meses"}</span></div><div style={{fontSize:11,color:B.greenDim,marginTop:6}}>💡 Datas e mês de referência avançam automaticamente.</div>{isEdit&&(<label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:B.greenDim,cursor:"pointer",marginTop:10}}><input type="checkbox" checked={updateFuture} onChange={e=>setUpdateFuture(e.target.checked)}/>Atualizar também os meses seguintes</label>)}</div>)}{!recurring&&<label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:B.textSub,cursor:"pointer"}}><input type="checkbox" checked={paid} onChange={e=>setPaid(e.target.checked)}/><Icon d={ic.check} size={14} stroke={B.green}/> Já está pago</label>}<div style={S.formActions}><button style={S.btnSecondary} onClick={onClose}>Cancelar</button><button style={S.btnPrimary} onClick={()=>desc&&value&&onSave({...(item||{}),description:desc,creditor,value:parseFloat(value),dueDate,refMonth,refYear,groupId,recurring,recurMonths,paid:recurring?false:paid,updateFuture,month:item?.month??selMonth,year:item?.year??selYear})}>Salvar</button></div></div>);
+  return(<div style={S.form}><label style={S.label}>Grupo</label><select style={S.input} value={groupId} onChange={e=>{setGroupId(e.target.value);setAiSuggestion(null);}}>{groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}</select><label style={S.label}>Descrição *</label>{isCardGroup&&cards&&cards.length>0?(<select style={S.input} value={desc} onChange={e=>{setDesc(e.target.value);const c=cards.find(c=>c.name===e.target.value);if(c&&!value)setValue(c.used||c.limit||"");}}><option value="">Selecione o cartão...</option>{cards.map(c=><option key={c.id} value={c.name}>{c.name}</option>)}</select>):(<input style={S.input} value={desc} onChange={e=>setDesc(e.target.value)} placeholder="ex: Conta de energia"/>)}{aiSuggestion&&(<div style={{display:"flex",alignItems:"center",gap:8,background:`${aiSuggestion.color}15`,border:`1px solid ${aiSuggestion.color}40`,borderRadius:10,padding:"8px 12px"}}><Icon d={ic.sparkle} size={13} stroke="#6366f1"/><span style={{fontSize:12,color:B.text,flex:1}}>IA sugere: <strong>{aiSuggestion.name}</strong></span><button style={{fontSize:11,fontWeight:700,color:aiSuggestion.color,background:"none",border:"none",cursor:"pointer"}} onClick={()=>{setGroupId(aiSuggestion.id);setAiSuggestion(null);}}>Usar ✓</button><button style={{fontSize:11,color:B.textMuted,background:"none",border:"none",cursor:"pointer"}} onClick={()=>setAiSuggestion(null)}>✕</button></div>)}<label style={S.label}>Credor</label><input style={S.input} value={creditor} onChange={e=>setCreditor(e.target.value)} placeholder="ex: CEMIG"/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}><div><label style={S.label}>Valor (R$) *</label><input style={S.input} type="number" value={value} onChange={e=>setValue(e.target.value)} placeholder="0,00"/></div><div><label style={S.label}>Data de Vencimento</label><input style={S.input} type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></div></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}><div><label style={S.label}>Mês de Referência</label><select style={S.input} value={refMonth} onChange={e=>setRefMonth(+e.target.value)}>{MONTHS_FULL.map((m,i)=><option key={i} value={i}>{m}</option>)}</select></div><div><label style={S.label}>Ano</label><input style={S.input} type="number" value={refYear} onChange={e=>setRefYear(+e.target.value)} min={2020} max={2099}/></div></div><label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:B.textSub,cursor:"pointer"}}><input type="checkbox" checked={recurring} onChange={e=>setRecurring(e.target.checked)}/><Icon d={ic.repeat} size={14} stroke={B.green}/> Lançar como recorrente</label>{recurring&&(<div style={{background:B.greenPale,borderRadius:10,padding:12}}><label style={{...S.label,color:B.greenDim}}>Repetir por quantos meses?</label><div style={{display:"flex",alignItems:"center",gap:12,marginTop:6}}><input type="range" min={1} max={24} value={recurMonths} onChange={e=>setRecurMonths(+e.target.value)}/><span style={{fontWeight:700,color:B.green,minWidth:60}}>{recurMonths} {recurMonths===1?"mês":"meses"}</span></div><div style={{fontSize:11,color:B.greenDim,marginTop:6}}>💡 Datas e mês de referência avançam automaticamente.</div>{isEdit&&(<div style={{marginTop:10,display:"flex",flexDirection:"column",gap:8}}><label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:B.greenDim,cursor:"pointer"}}><input type="checkbox" checked={updateFuture} onChange={e=>setUpdateFuture(e.target.checked)}/>Atualizar valor nos meses seguintes</label><label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:B.greenDim,cursor:"pointer"}}><input type="checkbox" checked={generateFuture} onChange={e=>setGenerateFuture(e.target.checked)}/>Gerar lançamentos nos meses futuros</label></div>)}</div>)}{!recurring&&<label style={{display:"flex",alignItems:"center",gap:8,fontSize:13,color:B.textSub,cursor:"pointer"}}><input type="checkbox" checked={paid} onChange={e=>setPaid(e.target.checked)}/><Icon d={ic.check} size={14} stroke={B.green}/> Já está pago</label>}<div style={S.formActions}><button style={S.btnSecondary} onClick={onClose}>Cancelar</button><button style={S.btnPrimary} onClick={()=>desc&&value&&onSave({...(item||{}),description:desc,creditor,value:parseFloat(value),dueDate,refMonth,refYear,groupId,recurring,recurMonths,paid:recurring?false:paid,updateFuture,generateFuture,month:item?.month??selMonth,year:item?.year??selYear})}>Salvar</button></div></div>);
 }
 
 function RevenueForm({revGroups,item,selMonth,selYear,onSave,onClose}){
