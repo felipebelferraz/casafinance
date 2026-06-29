@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { db } from "./firebase";
 import { collection, doc, setDoc, deleteDoc, onSnapshot, getDoc } from "firebase/firestore";
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "firebase/auth";
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, updateProfile } from "firebase/auth";
 
 const auth = getAuth();
 const provider = new GoogleAuthProvider();
@@ -134,13 +134,55 @@ function SplashScreen({onDone}){
 
 function LoginScreen(){
   const [loading,setLoading]=useState(false);
-  const handle=async()=>{setLoading(true);try{await signInWithPopup(auth,provider);}catch(e){setLoading(false);}};
+  const [mode,setMode]=useState("main"); // main | email-login | email-register | reset
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [name,setName]=useState("");
+  const [error,setError]=useState("");
+  const [resetSent,setResetSent]=useState(false);
+
+  const handleGoogle=async()=>{setLoading(true);setError("");try{await signInWithPopup(auth,provider);}catch(e){setError("Erro ao entrar com Google.");setLoading(false);}};
+
+  const handleEmailLogin=async()=>{
+    if(!email||!password){setError("Preencha email e senha.");return;}
+    setLoading(true);setError("");
+    try{await signInWithEmailAndPassword(auth,email,password);}
+    catch(e){
+      if(e.code==="auth/user-not-found"||e.code==="auth/wrong-password"||e.code==="auth/invalid-credential")setError("Email ou senha incorretos.");
+      else setError("Erro ao entrar. Tente novamente.");
+      setLoading(false);
+    }
+  };
+
+  const handleEmailRegister=async()=>{
+    if(!email||!password||!name){setError("Preencha todos os campos.");return;}
+    if(password.length<6){setError("A senha deve ter pelo menos 6 caracteres.");return;}
+    setLoading(true);setError("");
+    try{
+      const cred=await createUserWithEmailAndPassword(auth,email,password);
+      await updateProfile(cred.user,{displayName:name});
+    }catch(e){
+      if(e.code==="auth/email-already-in-use")setError("Este email já está cadastrado.");
+      else setError("Erro ao criar conta. Tente novamente.");
+      setLoading(false);
+    }
+  };
+
+  const handleReset=async()=>{
+    if(!email){setError("Digite seu email para recuperar a senha.");return;}
+    setLoading(true);setError("");
+    try{await sendPasswordResetEmail(auth,email);setResetSent(true);}
+    catch(e){setError("Email não encontrado.");setLoading(false);}
+  };
+
+  const inp={width:"100%",padding:"12px 14px",border:`1.5px solid rgba(51,214,159,.2)`,borderRadius:10,fontSize:14,color:B.white,background:"rgba(255,255,255,.06)",boxSizing:"border-box",outline:"none",fontFamily:"'Plus Jakarta Sans',sans-serif"};
+
   return(
     <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:B.navy,padding:16,fontFamily:"'Plus Jakarta Sans',sans-serif",position:"relative"}}>
       <div style={{position:"absolute",inset:0,backgroundImage:`radial-gradient(ellipse at 25% 50%,rgba(51,214,159,.07) 0%,transparent 55%)`}}/>
-      <div style={{background:"rgba(255,255,255,.03)",backdropFilter:"blur(24px)",border:"1px solid rgba(51,214,159,.12)",borderRadius:24,padding:40,maxWidth:380,width:"100%",display:"flex",flexDirection:"column",alignItems:"center",gap:14,position:"relative",zIndex:1,animation:"fade-up 0.6s ease",boxShadow:"0 40px 80px rgba(0,0,0,.5)"}}>
-        <div style={{width:80,height:80,borderRadius:22,background:B.navyMid,border:`1.5px solid rgba(51,214,159,.2)`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:4}}>
-          <svg width="48" height="48" viewBox="0 0 52 52" fill="none">
+      <div style={{background:"rgba(255,255,255,.03)",backdropFilter:"blur(24px)",border:"1px solid rgba(51,214,159,.12)",borderRadius:24,padding:32,maxWidth:380,width:"100%",display:"flex",flexDirection:"column",alignItems:"center",gap:14,position:"relative",zIndex:1,animation:"fade-up 0.6s ease",boxShadow:"0 40px 80px rgba(0,0,0,.5)"}}>
+        <div style={{width:72,height:72,borderRadius:20,background:B.navyMid,border:`1.5px solid rgba(51,214,159,.2)`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:2}}>
+          <svg width="42" height="42" viewBox="0 0 52 52" fill="none">
             <polygon points="26,10 42,23 10,23" fill="#33D69F" opacity=".14"/>
             <line x1="26" y1="10" x2="42" y2="23" stroke="#33D69F" strokeWidth="2.4" strokeLinecap="round"/>
             <line x1="26" y1="10" x2="10" y2="23" stroke="#33D69F" strokeWidth="2.4" strokeLinecap="round"/>
@@ -149,22 +191,86 @@ function LoginScreen(){
             <circle cx="35" cy="26" r="2.4" fill="#33D69F"/>
           </svg>
         </div>
-        <div style={{fontSize:28,fontWeight:800,color:B.white,letterSpacing:-0.5}}>Home<span style={{color:B.green}}> Finance</span></div>
+        <div style={{fontSize:26,fontWeight:800,color:B.white,letterSpacing:-0.5}}>Home<span style={{color:B.green}}> Finance</span></div>
         <div style={{fontSize:10,letterSpacing:"0.18em",color:"#2C6E7A",fontWeight:600,textTransform:"uppercase",marginTop:-8}}>Controle Financeiro Doméstico</div>
-        <div style={{width:"100%",height:1,background:"rgba(51,214,159,.1)",margin:"6px 0"}}/>
-        <div style={{fontSize:17,fontWeight:700,color:B.white}}>Bem-vindo de volta!</div>
-        <div style={{fontSize:13,color:B.textMuted,textAlign:"center"}}>Faça login para acessar suas finanças com segurança.</div>
-        <button style={{display:"flex",alignItems:"center",gap:12,background:B.white,color:B.text,border:"none",borderRadius:12,padding:"14px 24px",fontSize:15,fontWeight:700,cursor:"pointer",width:"100%",justifyContent:"center",marginTop:6,opacity:loading?0.7:1,fontFamily:"'Plus Jakarta Sans',sans-serif"}} onClick={handle} disabled={loading}>
-          <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-          {loading?"Entrando...":"Entrar com Google"}
-        </button>
+        <div style={{width:"100%",height:1,background:"rgba(51,214,159,.1)",margin:"4px 0"}}/>
+
+        {mode==="main"&&(<>
+          <div style={{fontSize:16,fontWeight:700,color:B.white}}>Bem-vindo de volta!</div>
+          <div style={{fontSize:13,color:B.textMuted,textAlign:"center"}}>Escolha como deseja entrar.</div>
+          <button style={{display:"flex",alignItems:"center",gap:12,background:B.white,color:B.text,border:"none",borderRadius:12,padding:"13px 20px",fontSize:14,fontWeight:700,cursor:"pointer",width:"100%",justifyContent:"center",opacity:loading?0.7:1,fontFamily:"'Plus Jakarta Sans',sans-serif"}} onClick={handleGoogle} disabled={loading}>
+            <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+            {loading?"Entrando...":"Entrar com Google"}
+          </button>
+          <div style={{display:"flex",alignItems:"center",gap:10,width:"100%"}}>
+            <div style={{flex:1,height:1,background:"rgba(51,214,159,.1)"}}/>
+            <span style={{fontSize:11,color:"#2C6E7A"}}>ou</span>
+            <div style={{flex:1,height:1,background:"rgba(51,214,159,.1)"}}/>
+          </div>
+          <button style={{display:"flex",alignItems:"center",gap:10,background:"transparent",color:B.white,border:"1.5px solid rgba(51,214,159,.25)",borderRadius:12,padding:"13px 20px",fontSize:14,fontWeight:600,cursor:"pointer",width:"100%",justifyContent:"center",fontFamily:"'Plus Jakarta Sans',sans-serif"}} onClick={()=>{setMode("email-login");setError("");}}>
+            ✉️ Entrar com Email
+          </button>
+          <button style={{fontSize:12,color:B.green,background:"none",border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:600}} onClick={()=>{setMode("email-register");setError("");}}>
+            Criar conta com email
+          </button>
+        </>)}
+
+        {mode==="email-login"&&(<>
+          <div style={{fontSize:16,fontWeight:700,color:B.white,alignSelf:"flex-start"}}>Entrar com email</div>
+          <input style={inp} type="email" placeholder="Seu email" value={email} onChange={e=>setEmail(e.target.value)}/>
+          <input style={inp} type="password" placeholder="Senha" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleEmailLogin()}/>
+          {error&&<div style={{fontSize:12,color:B.danger,textAlign:"center",width:"100%"}}>{error}</div>}
+          <button style={{display:"flex",alignItems:"center",justifyContent:"center",background:B.green,color:B.navy,border:"none",borderRadius:12,padding:"13px 20px",fontSize:14,fontWeight:700,cursor:"pointer",width:"100%",opacity:loading?0.7:1,fontFamily:"'Plus Jakarta Sans',sans-serif"}} onClick={handleEmailLogin} disabled={loading}>
+            {loading?"Entrando...":"Entrar"}
+          </button>
+          <button style={{fontSize:12,color:B.textMuted,background:"none",border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif"}} onClick={()=>{setMode("reset");setError("");}}>
+            Esqueci minha senha
+          </button>
+          <button style={{fontSize:12,color:B.green,background:"none",border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:600}} onClick={()=>{setMode("main");setError("");}}>
+            ← Voltar
+          </button>
+        </>)}
+
+        {mode==="email-register"&&(<>
+          <div style={{fontSize:16,fontWeight:700,color:B.white,alignSelf:"flex-start"}}>Criar conta</div>
+          <input style={inp} type="text" placeholder="Seu nome completo" value={name} onChange={e=>setName(e.target.value)}/>
+          <input style={inp} type="email" placeholder="Seu email" value={email} onChange={e=>setEmail(e.target.value)}/>
+          <input style={inp} type="password" placeholder="Senha (mín. 6 caracteres)" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleEmailRegister()}/>
+          {error&&<div style={{fontSize:12,color:B.danger,textAlign:"center",width:"100%"}}>{error}</div>}
+          <button style={{display:"flex",alignItems:"center",justifyContent:"center",background:B.green,color:B.navy,border:"none",borderRadius:12,padding:"13px 20px",fontSize:14,fontWeight:700,cursor:"pointer",width:"100%",opacity:loading?0.7:1,fontFamily:"'Plus Jakarta Sans',sans-serif"}} onClick={handleEmailRegister} disabled={loading}>
+            {loading?"Criando conta...":"Criar conta"}
+          </button>
+          <button style={{fontSize:12,color:B.green,background:"none",border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:600}} onClick={()=>{setMode("main");setError("");}}>
+            ← Voltar
+          </button>
+        </>)}
+
+        {mode==="reset"&&(<>
+          <div style={{fontSize:16,fontWeight:700,color:B.white,alignSelf:"flex-start"}}>Recuperar senha</div>
+          {resetSent?(<>
+            <div style={{fontSize:13,color:B.green,textAlign:"center"}}>✅ Email enviado! Verifique sua caixa de entrada.</div>
+            <button style={{fontSize:12,color:B.green,background:"none",border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:600}} onClick={()=>{setMode("email-login");setResetSent(false);setError("");}}>
+              ← Voltar para login
+            </button>
+          </>):(<>
+            <div style={{fontSize:13,color:B.textMuted,textAlign:"center"}}>Digite seu email e enviaremos um link para redefinir sua senha.</div>
+            <input style={inp} type="email" placeholder="Seu email" value={email} onChange={e=>setEmail(e.target.value)}/>
+            {error&&<div style={{fontSize:12,color:B.danger,textAlign:"center",width:"100%"}}>{error}</div>}
+            <button style={{display:"flex",alignItems:"center",justifyContent:"center",background:B.green,color:B.navy,border:"none",borderRadius:12,padding:"13px 20px",fontSize:14,fontWeight:700,cursor:"pointer",width:"100%",opacity:loading?0.7:1,fontFamily:"'Plus Jakarta Sans',sans-serif"}} onClick={handleReset} disabled={loading}>
+              {loading?"Enviando...":"Enviar link de recuperação"}
+            </button>
+            <button style={{fontSize:12,color:B.green,background:"none",border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:600}} onClick={()=>{setMode("email-login");setError("");}}>
+              ← Voltar
+            </button>
+          </>)}
+        </>)}
+
         <div style={{fontSize:11,color:"#2C6E7A"}}>🔒 Seus dados são privados e protegidos</div>
       </div>
-      <style>{`@keyframes fade-up{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}`}</style>
+      <style>{`@keyframes fade-up{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}input::placeholder{color:#2C6E7A;}`}</style>
     </div>
   );
 }
-
 function FamilySetup({user,onComplete}){
   const [mode,setMode]=useState(null);
   const [code,setCode]=useState("");
