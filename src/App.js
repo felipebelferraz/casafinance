@@ -257,9 +257,12 @@ export default function App(){
       setUser(u);
       if(u){
         setFamilyLoading(true);
+        setFamilyId(null);
         const snap=await getDoc(doc(db,"userFamily",u.uid));
         if(snap.exists()) setFamilyId(snap.data().familyId);
         setFamilyLoading(false);
+      } else {
+        setFamilyId(null);
       }
       setAuthLoading(false);
     });
