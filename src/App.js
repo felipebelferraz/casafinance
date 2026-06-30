@@ -138,6 +138,7 @@ function LoginScreen(){
   const [email,setEmail]=useState("");
   const [password,setPassword]=useState("");
   const [name,setName]=useState("");
+  const [confirmPassword,setConfirmPassword]=useState("");
   const [error,setError]=useState("");
   const [resetSent,setResetSent]=useState(false);
 
@@ -155,8 +156,9 @@ function LoginScreen(){
   };
 
   const handleEmailRegister=async()=>{
-    if(!email||!password||!name){setError("Preencha todos os campos.");return;}
+    if(!email||!password||!name||!confirmPassword){setError("Preencha todos os campos.");return;}
     if(password.length<6){setError("A senha deve ter pelo menos 6 caracteres.");return;}
+    if(password!==confirmPassword){setError("As senhas não coincidem.");return;}
     setLoading(true);setError("");
     try{
       const cred=await createUserWithEmailAndPassword(auth,email,password);
@@ -235,7 +237,8 @@ function LoginScreen(){
           <div style={{fontSize:16,fontWeight:700,color:B.white,alignSelf:"flex-start"}}>Criar conta</div>
           <input style={inp} type="text" placeholder="Seu nome completo" value={name} onChange={e=>setName(e.target.value)}/>
           <input style={inp} type="email" placeholder="Seu email" value={email} onChange={e=>setEmail(e.target.value)}/>
-          <input style={inp} type="password" placeholder="Senha (mín. 6 caracteres)" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleEmailRegister()}/>
+          <input style={inp} type="password" placeholder="Senha (mín. 6 caracteres)" value={password} onChange={e=>setPassword(e.target.value)}/>
+          <input style={inp} type="password" placeholder="Confirme sua senha" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleEmailRegister()}/>
           {error&&<div style={{fontSize:12,color:B.danger,textAlign:"center",width:"100%"}}>{error}</div>}
           <button style={{display:"flex",alignItems:"center",justifyContent:"center",background:B.green,color:B.navy,border:"none",borderRadius:12,padding:"13px 20px",fontSize:14,fontWeight:700,cursor:"pointer",width:"100%",opacity:loading?0.7:1,fontFamily:"'Plus Jakarta Sans',sans-serif"}} onClick={handleEmailRegister} disabled={loading}>
             {loading?"Criando conta...":"Criar conta"}
@@ -413,6 +416,10 @@ function Dashboard({user,familyId,theme,setTheme}){
   const [showRevGroupForm,setShowRevGroupForm]=useState(false);
   const [editRevGroup,setEditRevGroup]=useState(null);
   const [showGoalForm,setShowGoalForm]=useState(false);
+  const [selectMode,setSelectMode]=useState(false);
+  const [selectedExp,setSelectedExp]=useState([]);
+  const [selectRevMode,setSelectRevMode]=useState(false);
+  const [selectedRev,setSelectedRev]=useState([]);
   const [editGoal,setEditGoal]=useState(null);
   const [showCardForm,setShowCardForm]=useState(false);
   const [editCard,setEditCard]=useState(null);
@@ -609,6 +616,46 @@ function Dashboard({user,familyId,theme,setTheme}){
 
   const toggleReceived=async(id)=>{const item=revenues.find(r=>r.id===id);await setDoc(doc(db,`${base}/revenues`,id),{...item,received:!item.received});};
   const deleteRevenue=async(id)=>{await deleteDoc(doc(db,`${base}/revenues`,id));notify("Receita removida");};
+
+  const copyExpensesToNextMonth=async()=>{
+    if(selectedExp.length===0){notify("Selecione ao menos uma despesa.");return;}
+    let nextMonth=selMonth+1, nextYear=selYear;
+    if(nextMonth>11){nextMonth=0;nextYear+=1;}
+    let count=0;
+    for(const expId of selectedExp){
+      const item=expenses.find(e=>e.id===expId);
+      if(!item)continue;
+      const existing=expenses.find(e=>e.description===item.description&&e.groupId===item.groupId&&e.month===nextMonth&&e.year===nextYear);
+      const targetId=existing?existing.id:`exp_${Date.now()}_${count}`;
+      let dueDate=item.dueDate;
+      if(dueDate){const d=new Date(dueDate);d.setMonth(d.getMonth()+1);dueDate=d.toISOString().slice(0,10);}
+      const refMonth=(item.refMonth+1)%12;
+      const refYear=item.refYear+Math.floor((item.refMonth+1)/12);
+      await setDoc(doc(db,`${base}/expenses`,targetId),{...item,id:targetId,month:nextMonth,year:nextYear,paid:false,dueDate,refMonth,refYear,authorUid:user.uid,authorName:user.displayName});
+      count++;
+    }
+    notify(`${count} despesa(s) copiada(s) para ${MONTHS_FULL[nextMonth]}!`);
+    setSelectedExp([]);setSelectMode(false);
+  };
+
+  const copyRevenuesToNextMonth=async()=>{
+    if(selectedRev.length===0){notify("Selecione ao menos uma receita.");return;}
+    let nextMonth=selMonth+1, nextYear=selYear;
+    if(nextMonth>11){nextMonth=0;nextYear+=1;}
+    let count=0;
+    for(const revId of selectedRev){
+      const item=revenues.find(r=>r.id===revId);
+      if(!item)continue;
+      const existing=revenues.find(r=>r.description===item.description&&r.groupId===item.groupId&&r.month===nextMonth&&r.year===nextYear);
+      const targetId=existing?existing.id:`rev_${Date.now()}_${count}`;
+      let expectedDate=item.expectedDate;
+      if(expectedDate){const d=new Date(expectedDate);d.setMonth(d.getMonth()+1);expectedDate=d.toISOString().slice(0,10);}
+      await setDoc(doc(db,`${base}/revenues`,targetId),{...item,id:targetId,month:nextMonth,year:nextYear,received:false,expectedDate,authorUid:user.uid,authorName:user.displayName});
+      count++;
+    }
+    notify(`${count} receita(s) copiada(s) para ${MONTHS_FULL[nextMonth]}!`);
+    setSelectedRev([]);setSelectRevMode(false);
+  };
 
   const saveRevGroup=async(name,icon,color,id)=>{
     if(id){await setDoc(doc(db,`${base}/revGroups`,id),{id,name,icon,color});notify("Categoria atualizada!");}
@@ -814,7 +861,19 @@ function Dashboard({user,familyId,theme,setTheme}){
               <button style={S.btnPrimary} onClick={()=>{setEditItem(null);setShowForm(true);}}><Icon d={ic.plus} size={14}/> Nova Despesa</button>
               <button style={S.btnSecondary} onClick={()=>{setEditGroup(null);setShowGroupForm(true);}}><Icon d={ic.plus} size={14}/> Grupo</button>
             </div>
-            {groups.map(g=>{const items=monthExpenses.filter(e=>e.groupId===g.id);if(items.length===0)return null;return <GroupSection key={g.id} group={g} items={items} total={items.reduce((s,e)=>s+(e.value||0),0)} onToggle={togglePaid} onEdit={item=>{setEditItem(item);setShowForm(true);}} onDelete={deleteExpense} onDeleteGroup={deleteGroup} onEditGroup={g=>{setEditGroup(g);setShowGroupForm(true);}} isOverdue={isExpenseOverdue}/>;
+            <div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}>
+              {!selectMode?(
+                <button style={{...S.btnSecondary,fontSize:12}} onClick={()=>setSelectMode(true)}><Icon d={ic.copy||ic.check} size={13}/> Selecionar para copiar</button>
+              ):(
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",width:"100%",justifyContent:"flex-end"}}>
+                  <span style={{fontSize:12,color:B.textMuted}}>{selectedExp.length} selecionado(s)</span>
+                  <button style={{...S.btnSecondary,fontSize:12}} onClick={()=>setSelectedExp(selectedExp.length===monthExpenses.length?[]:monthExpenses.map(e=>e.id))}>{selectedExp.length===monthExpenses.length?"Desmarcar todos":"Selecionar todos"}</button>
+                  <button style={{...S.btnPrimary,fontSize:12}} onClick={copyExpensesToNextMonth}>Copiar para {MONTHS[(selMonth+1)%12]}</button>
+                  <button style={{...S.btnSecondary,fontSize:12}} onClick={()=>{setSelectMode(false);setSelectedExp([]);}}>Cancelar</button>
+                </div>
+              )}
+            </div>
+            {groups.map(g=>{const items=monthExpenses.filter(e=>e.groupId===g.id);if(items.length===0)return null;return <GroupSection key={g.id} group={g} items={items} total={items.reduce((s,e)=>s+(e.value||0),0)} onToggle={togglePaid} onEdit={item=>{setEditItem(item);setShowForm(true);}} onDelete={deleteExpense} onDeleteGroup={deleteGroup} onEditGroup={g=>{setEditGroup(g);setShowGroupForm(true);}} isOverdue={isExpenseOverdue} selectMode={selectMode} selectedIds={selectedExp} onSelectItem={id=>setSelectedExp(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id])}/>;
             })}
             {monthExpenses.length===0&&<div style={S.emptyState}><div style={{fontSize:48}}>📂</div><div style={{color:B.textMuted,fontSize:14}}>Nenhuma despesa em {MONTHS_FULL[selMonth]}</div><button style={S.btnPrimary} onClick={()=>setShowForm(true)}>Adicionar primeira despesa</button></div>}
             {showForm&&<Modal onClose={()=>{setShowForm(false);setEditItem(null);}} title={editItem?"Editar Despesa":"Nova Despesa"}><ExpenseForm groups={groups} cards={cards} item={editItem} selMonth={selMonth} selYear={selYear} onSave={saveExpense} onClose={()=>{setShowForm(false);setEditItem(null);}}/></Modal>}
@@ -827,6 +886,18 @@ function Dashboard({user,familyId,theme,setTheme}){
             <div style={S.rowBetween}>
               <button style={S.btnPrimary} onClick={()=>{setEditItem(null);setShowRevForm(true);}}><Icon d={ic.plus} size={14}/> Nova Receita</button>
               <button style={S.btnSecondary} onClick={()=>{setEditRevGroup(null);setShowRevGroupForm(true);}}><Icon d={ic.plus} size={14}/> Categoria</button>
+            </div>
+            <div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}>
+              {!selectRevMode?(
+                <button style={{...S.btnSecondary,fontSize:12}} onClick={()=>setSelectRevMode(true)}><Icon d={ic.copy||ic.check} size={13}/> Selecionar para copiar</button>
+              ):(
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",width:"100%",justifyContent:"flex-end"}}>
+                  <span style={{fontSize:12,color:B.textMuted}}>{selectedRev.length} selecionado(s)</span>
+                  <button style={{...S.btnSecondary,fontSize:12}} onClick={()=>setSelectedRev(selectedRev.length===monthRevenues.length?[]:monthRevenues.map(r=>r.id))}>{selectedRev.length===monthRevenues.length?"Desmarcar todos":"Selecionar todos"}</button>
+                  <button style={{...S.btnPrimary,fontSize:12}} onClick={copyRevenuesToNextMonth}>Copiar para {MONTHS[(selMonth+1)%12]}</button>
+                  <button style={{...S.btnSecondary,fontSize:12}} onClick={()=>{setSelectRevMode(false);setSelectedRev([]);}}>Cancelar</button>
+                </div>
+              )}
             </div>
             <div style={S.card}>
               <div style={S.cardTitle}>Total — {MONTHS_FULL[selMonth]}</div>
@@ -852,6 +923,7 @@ function Dashboard({user,familyId,theme,setTheme}){
                   </div>
                   {items.map(r=>(
                     <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:`1px solid ${B.bg}`,opacity:r.received?0.7:1}}>
+                      {selectRevMode&&<input type="checkbox" checked={selectedRev.includes(r.id)} onChange={()=>setSelectedRev(prev=>prev.includes(r.id)?prev.filter(x=>x!==r.id):[...prev,r.id])} style={{width:18,height:18,flexShrink:0,accentColor:B.green,cursor:"pointer"}}/>}
                       <button style={{width:22,height:22,borderRadius:6,border:`2px solid ${r.received?B.green:isRevenueOverdue(r)?B.danger:B.grayMid}`,background:r.received?B.green:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} onClick={()=>toggleReceived(r.id)}>
                         {r.received&&<Icon d={ic.check} size={11} stroke="#fff" strokeWidth={2.5}/>}
                       </button>
@@ -977,14 +1049,14 @@ function KpiCard({label,value,icon,color,sub}){return(<div style={{...S.kpiCard,
 
 function ProgressRow({label,value,total,color}){return(<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",fontSize:12,width:130,flexShrink:0,color:B.textSub}}><span>{label}</span><span style={{color}}>{fmt(value)}</span></div><div style={{flex:1,height:5,background:B.border,borderRadius:99}}><div style={{width:`${pct(value,total)}%`,height:"100%",borderRadius:99,background:color,transition:"width .5s"}}/></div><span style={{fontSize:11,color:B.textMuted,width:32,textAlign:"right"}}>{pct(value,total)}%</span></div>);}
 
-function GroupSection({group,items,total,onToggle,onEdit,onDelete,onDeleteGroup,onEditGroup,isOverdue}){
+function GroupSection({group,items,total,onToggle,onEdit,onDelete,onDeleteGroup,onEditGroup,isOverdue,selectMode,selectedIds,onSelectItem}){
   const [open,setOpen]=useState(true);
-  return(<div style={S.groupCard}><div style={S.groupHeader} onClick={()=>setOpen(o=>!o)}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:10,height:10,borderRadius:"50%",background:group.color}}/><span style={{fontWeight:700,fontSize:14,color:B.text}}>{group.name}</span><span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${group.color}18`,color:group.color}}>{items.length}</span></div><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontWeight:700,fontSize:14,color:B.text}}>{fmt(total)}</span><button style={{...S.iconBtn,padding:2}} onClick={e=>{e.stopPropagation();onEditGroup&&onEditGroup(group);}}><Icon d={ic.edit} size={12} stroke="#6366f1"/></button><button style={{...S.iconBtn,padding:2}} onClick={e=>{e.stopPropagation();if(window.confirm("Remover grupo?"))onDeleteGroup(group.id);}}><Icon d={ic.trash} size={12} stroke={B.danger}/></button><Icon d={open?ic.chevron_down:ic.chevron_right} size={14} stroke={B.grayMid}/></div></div>{open&&items.map(item=><ExpenseRow key={item.id} item={item} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} isOverdue={isOverdue}/>)}</div>);
+  return(<div style={S.groupCard}><div style={S.groupHeader} onClick={()=>setOpen(o=>!o)}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:10,height:10,borderRadius:"50%",background:group.color}}/><span style={{fontWeight:700,fontSize:14,color:B.text}}>{group.name}</span><span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${group.color}18`,color:group.color}}>{items.length}</span></div><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontWeight:700,fontSize:14,color:B.text}}>{fmt(total)}</span><button style={{...S.iconBtn,padding:2}} onClick={e=>{e.stopPropagation();onEditGroup&&onEditGroup(group);}}><Icon d={ic.edit} size={12} stroke="#6366f1"/></button><button style={{...S.iconBtn,padding:2}} onClick={e=>{e.stopPropagation();if(window.confirm("Remover grupo?"))onDeleteGroup(group.id);}}><Icon d={ic.trash} size={12} stroke={B.danger}/></button><Icon d={open?ic.chevron_down:ic.chevron_right} size={14} stroke={B.grayMid}/></div></div>{open&&items.map(item=><ExpenseRow key={item.id} item={item} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} isOverdue={isOverdue} selectMode={selectMode} selected={selectedIds&&selectedIds.includes(item.id)} onSelectItem={onSelectItem}/>)}</div>);
 }
 
-function ExpenseRow({item,onToggle,onEdit,onDelete,isOverdue}){
+function ExpenseRow({item,onToggle,onEdit,onDelete,isOverdue,selectMode,selected,onSelectItem}){
   const overdue=isOverdue?isOverdue(item):false;
-  return(<div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:`1px solid ${B.bg}`,opacity:item.paid?0.6:1}}><button style={{width:22,height:22,borderRadius:6,border:`2px solid ${item.paid?B.green:overdue?B.danger:B.grayMid}`,background:item.paid?B.green:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} onClick={()=>onToggle(item.id)}>{item.paid&&<Icon d={ic.check} size={11} stroke="#fff" strokeWidth={2.5}/>}</button><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}><span style={{fontSize:13,fontWeight:600,color:B.text,textDecoration:item.paid?"line-through":"none"}}>{item.description}</span>{item.recurring&&<span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:B.greenDim,background:B.greenPale,padding:"2px 6px",borderRadius:99}}><Icon d={ic.repeat} size={10}/>recorrente</span>}{overdue&&<span style={{fontSize:10,color:"#fff",background:B.danger,padding:"2px 7px",borderRadius:99,fontWeight:700}}>● EM ATRASO</span>}</div><div style={{fontSize:11,color:B.textMuted,marginTop:2}}>{item.creditor}{item.dueDate?` · Vence ${item.dueDate}`:item.dueDay?` · Vence dia ${item.dueDay}`:""}{item.refMonth!==undefined?` · Ref: ${MONTHS[item.refMonth]}/${item.refYear||new Date().getFullYear()}`:""}</div>{item.authorName&&<div style={{fontSize:10,color:B.green}}>👤 {item.authorName}</div>}</div><div style={{fontWeight:700,fontSize:14,flexShrink:0,color:item.paid?B.green:overdue?B.danger:B.navy}}>{fmt(item.value)}</div><div style={{display:"flex",gap:4,flexShrink:0}}><button style={S.iconBtn} onClick={()=>onEdit(item)}><Icon d={ic.edit} size={13} stroke="#6366f1"/></button><button style={S.iconBtn} onClick={()=>onDelete(item.id)}><Icon d={ic.trash} size={13} stroke={B.danger}/></button></div></div>);
+  return(<div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:`1px solid ${B.bg}`,opacity:item.paid?0.6:1}}>{selectMode&&<input type="checkbox" checked={!!selected} onChange={()=>onSelectItem&&onSelectItem(item.id)} style={{width:18,height:18,flexShrink:0,accentColor:B.green,cursor:"pointer"}}/>}<button style={{width:22,height:22,borderRadius:6,border:`2px solid ${item.paid?B.green:overdue?B.danger:B.grayMid}`,background:item.paid?B.green:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} onClick={()=>onToggle(item.id)}>{item.paid&&<Icon d={ic.check} size={11} stroke="#fff" strokeWidth={2.5}/>}</button><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}><span style={{fontSize:13,fontWeight:600,color:B.text,textDecoration:item.paid?"line-through":"none"}}>{item.description}</span>{item.recurring&&<span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:B.greenDim,background:B.greenPale,padding:"2px 6px",borderRadius:99}}><Icon d={ic.repeat} size={10}/>recorrente</span>}{overdue&&<span style={{fontSize:10,color:"#fff",background:B.danger,padding:"2px 7px",borderRadius:99,fontWeight:700}}>● EM ATRASO</span>}</div><div style={{fontSize:11,color:B.textMuted,marginTop:2}}>{item.creditor}{item.dueDate?` · Vence ${item.dueDate}`:item.dueDay?` · Vence dia ${item.dueDay}`:""}{item.refMonth!==undefined?` · Ref: ${MONTHS[item.refMonth]}/${item.refYear||new Date().getFullYear()}`:""}</div>{item.authorName&&<div style={{fontSize:10,color:B.green}}>👤 {item.authorName}</div>}</div><div style={{fontWeight:700,fontSize:14,flexShrink:0,color:item.paid?B.green:overdue?B.danger:B.navy}}>{fmt(item.value)}</div><div style={{display:"flex",gap:4,flexShrink:0}}><button style={S.iconBtn} onClick={()=>onEdit(item)}><Icon d={ic.edit} size={13} stroke="#6366f1"/></button><button style={S.iconBtn} onClick={()=>onDelete(item.id)}><Icon d={ic.trash} size={13} stroke={B.danger}/></button></div></div>);
 }
 
 function Modal({onClose,title,children}){return(<div style={S.overlay} onClick={e=>e.target===e.currentTarget&&onClose()}><div style={S.modal}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}><span style={{fontWeight:700,fontSize:16,color:B.text}}>{title}</span><button style={S.closeBtn} onClick={onClose}><Icon d={ic.x} size={16} stroke={B.textSub}/></button></div>{children}</div></div>);}
