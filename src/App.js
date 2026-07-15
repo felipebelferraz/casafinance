@@ -436,6 +436,8 @@ function Dashboard({user,familyId,theme,setTheme}){
   const [copiedCode,setCopiedCode]=useState(false);
   const [hideValues,setHideValues]=useState(false);
   const fmtH=(v)=>hideValues?"R$ ••••":fmt(v);
+  const [menuOpen,setMenuOpen]=useState(false);
+  const [compactMode,setCompactMode]=useState(false);
 
   const notify=(msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),3000);};
 
@@ -557,6 +559,25 @@ function Dashboard({user,familyId,theme,setTheme}){
   },[history,histFilter,expenses]);
 
   const memberContrib=useMemo(()=>members.map(m=>({...m,expTotal:allMonthExpenses.filter(e=>e.authorUid===m.uid).reduce((s,e)=>s+(e.value||0),0),revTotal:allMonthRevenues.filter(r=>r.authorUid===m.uid).reduce((s,r)=>s+(r.value||0),0)})),[members,allMonthExpenses,allMonthRevenues]);
+
+  // Evolução do saldo dia a dia no mês
+  const dailyBalance=useMemo(()=>{
+    const daysInMonth=new Date(selYear,selMonth+1,0).getDate();
+    const todayDay=selMonth===CURRENT_MONTH&&selYear===CURRENT_YEAR?new Date().getDate():daysInMonth;
+    const days=[];
+    let cumExp=0;
+    const rev=totalRevenue;
+    for(let d=1;d<=Math.min(todayDay,daysInMonth);d++){
+      const dayExp=monthExpenses.filter(e=>{
+        if(e.dueDate){const dd=new Date(e.dueDate);return dd.getDate()===d&&dd.getMonth()===selMonth&&dd.getFullYear()===selYear;}
+        if(e.dueDay)return e.dueDay===d;
+        return false;
+      }).reduce((s,e)=>s+(e.value||0),0);
+      cumExp+=dayExp;
+      days.push({day:d,balance:rev-cumExp,exp:cumExp});
+    }
+    return days;
+  },[monthExpenses,totalRevenue,selMonth,selYear]);
 
   const isExpenseOverdue=(item)=>{if(item.paid)return false;if(item.dueDate){const d=new Date(item.dueDate);return d<TODAY;}if(item.dueDay&&item.month===CURRENT_MONTH&&item.year===CURRENT_YEAR)return item.dueDay<TODAY.getDate();if(item.month<CURRENT_MONTH&&item.year<=CURRENT_YEAR)return true;return false;};
   const isRevenueOverdue=(item)=>{if(item.received)return false;if(item.expectedDate){const d=new Date(item.expectedDate);return d<TODAY;}if(item.month<CURRENT_MONTH&&item.year<=CURRENT_YEAR)return true;return false;};
@@ -815,8 +836,9 @@ function Dashboard({user,familyId,theme,setTheme}){
 
       <header style={S.header}>
         <div style={S.headerInner}>
+          {/* LOGO + SAUDAÇÃO */}
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <div style={{width:38,height:38,borderRadius:11,background:B.navyMid,border:`1px solid rgba(51,214,159,.2)`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <div style={{width:38,height:38,borderRadius:11,background:B.navyMid,border:`1px solid rgba(51,214,159,.2)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
               <svg width="22" height="22" viewBox="0 0 52 52" fill="none"><polygon points="26,10 42,23 10,23" fill="#33D69F" opacity=".14"/><line x1="26" y1="10" x2="42" y2="23" stroke="#33D69F" strokeWidth="2.4" strokeLinecap="round"/><line x1="26" y1="10" x2="10" y2="23" stroke="#33D69F" strokeWidth="2.4" strokeLinecap="round"/><rect x="14" y="23" width="24" height="17" rx="2.5" fill="none" stroke="#33D69F" strokeWidth="1.8"/><polyline points="17,37 21,32 26,34 35,26" stroke="#0ED492" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/><circle cx="35" cy="26" r="2.4" fill="#33D69F"/></svg>
             </div>
             <div>
@@ -824,23 +846,29 @@ function Dashboard({user,familyId,theme,setTheme}){
               <div style={{fontSize:10,color:"#2C6E7A",fontWeight:600}}>{greet()}, {user.displayName?.split(" ")[0]}!</div>
             </div>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
+
+          {/* BOTÕES DIREITA */}
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            {/* Olhinho — sempre visível */}
+            <button style={{background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)",cursor:"pointer",padding:"8px",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} onClick={()=>setHideValues(v=>!v)} title={hideValues?"Mostrar valores":"Ocultar valores"}>
+              <Icon d={hideValues?ic.eyeOff:ic.eye} size={18} stroke={hideValues?B.textMuted:B.green}/>
+            </button>
+            {/* Nav mês */}
             <div style={S.monthNav}>
               <button style={S.navBtn} onClick={()=>{if(selMonth===0){setSelMonth(11);setSelYear(y=>y-1);}else setSelMonth(m=>m-1);}}>‹</button>
               <span style={S.monthLabel}>{MONTHS[selMonth]}/{selYear}</span>
               <button style={S.navBtn} onClick={()=>{if(selMonth===11){setSelMonth(0);setSelYear(y=>y+1);}else setSelMonth(m=>m+1);}}>›</button>
             </div>
-            <button style={{background:"rgba(51,214,159,.1)",border:`1px solid rgba(51,214,159,.2)`,cursor:"pointer",padding:"6px 10px",borderRadius:8,display:"flex",alignItems:"center",gap:6,color:B.green,fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}} onClick={()=>setShowFamilyPanel(true)}>
-              <Icon d={ic.users} size={14} stroke={B.green}/>{members.length>1?`${members.length} membros`:"Família"}
-            </button>
-            <button style={{background:"linear-gradient(135deg,rgba(99,102,241,.2),rgba(51,214,159,.15))",border:`1px solid rgba(99,102,241,.3)`,cursor:"pointer",padding:"6px 10px",borderRadius:8,display:"flex",alignItems:"center",gap:6,color:"#a5b4fc",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}} onClick={()=>setShowAIPanel(true)}>
-              <Icon d={ic.sparkle} size={14} stroke="#a5b4fc"/> IA
-            </button>
-            <button style={{background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)",cursor:"pointer",padding:"6px 10px",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setHideValues(v=>!v)} title={hideValues?"Mostrar valores":"Ocultar valores"}>
-              <Icon d={hideValues?ic.eyeOff:ic.eye} size={16} stroke={hideValues?B.textMuted:B.green}/>
+            {/* Menu sanduíche mobile */}
+            <button style={{background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)",cursor:"pointer",padding:"8px",borderRadius:8,display:"flex",flexDirection:"column",gap:4,alignItems:"center",justifyContent:"center",flexShrink:0}} onClick={()=>setMenuOpen(o=>!o)}>
+              <div style={{width:16,height:2,background:menuOpen?B.green:B.white,borderRadius:2,transition:"all .2s"}}/>
+              <div style={{width:16,height:2,background:menuOpen?B.green:B.white,borderRadius:2,transition:"all .2s",opacity:menuOpen?0:1}}/>
+              <div style={{width:16,height:2,background:menuOpen?B.green:B.white,borderRadius:2,transition:"all .2s"}}/>
             </button>
           </div>
         </div>
+
+        {/* FILTRO DE MEMBROS */}
         {members.length>1&&(
           <div style={{display:"flex",gap:6,paddingBottom:10,overflowX:"auto"}}>
             <button style={{...S.memberBtn,...(memberFilter==="all"?S.memberBtnActive:{})}} onClick={()=>setMemberFilter("all")}>Todos</button>
@@ -851,17 +879,73 @@ function Dashboard({user,familyId,theme,setTheme}){
         )}
       </header>
 
-      <nav style={S.nav}>
-        {[{id:"dashboard",label:"Painel",icon:"grid"},{id:"expenses",label:"Despesas",icon:"tag"},{id:"revenues",label:"Receitas",icon:"wallet"},{id:"goals",label:"Metas",icon:"target"},{id:"cards",label:"Cartões",icon:"credit"},{id:"history",label:"Histórico",icon:"chart"}].map(t=>(
-          <button key={t.id} style={{...S.tab,...(activeTab===t.id?S.tabActive:{})}} onClick={()=>setActiveTab(t.id)}>
-            <Icon d={ic[t.icon]} size={13} stroke={activeTab===t.id?B.green:"currentColor"}/>{t.label}
-          </button>
-        ))}
-      </nav>
+      {/* MENU DROPDOWN MOBILE */}
+      {menuOpen&&(
+        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,zIndex:200,background:"rgba(0,0,0,.5)"}} onClick={()=>setMenuOpen(false)}>
+          <div style={{position:"absolute",top:0,right:0,bottom:0,width:260,background:B.navyMid,boxShadow:"-8px 0 32px rgba(0,0,0,.5)",display:"flex",flexDirection:"column",padding:24,gap:8}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div style={{fontWeight:800,fontSize:16,color:B.white}}>Menu</div>
+              <button style={{background:"none",border:"none",cursor:"pointer",color:B.textMuted}} onClick={()=>setMenuOpen(false)}><Icon d={ic.x} size={20} stroke={B.textMuted}/></button>
+            </div>
+            {[{id:"dashboard",label:"Painel",icon:"grid"},{id:"expenses",label:"Despesas",icon:"tag"},{id:"revenues",label:"Receitas",icon:"wallet"},{id:"goals",label:"Metas",icon:"target"},{id:"cards",label:"Cartões",icon:"credit"},{id:"history",label:"Histórico",icon:"chart"}].map(t=>(
+              <button key={t.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderRadius:12,border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:activeTab===t.id?700:500,background:activeTab===t.id?`${B.green}18`:"transparent",color:activeTab===t.id?B.green:B.textSub,textAlign:"left"}} onClick={()=>{setActiveTab(t.id);setMenuOpen(false);}}>
+                <Icon d={ic[t.icon]} size={18} stroke={activeTab===t.id?B.green:B.textMuted}/>{t.label}
+              </button>
+            ))}
+            <div style={{height:1,background:B.border,margin:"8px 0"}}/>
+            <button style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderRadius:12,border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:500,background:"transparent",color:B.green,textAlign:"left"}} onClick={()=>{setShowFamilyPanel(true);setMenuOpen(false);}}>
+              <Icon d={ic.users} size={18} stroke={B.green}/>{members.length>1?`${members.length} membros`:"Família"}
+            </button>
+            <button style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderRadius:12,border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:500,background:"linear-gradient(135deg,rgba(99,102,241,.15),rgba(51,214,159,.1))",color:"#a5b4fc",textAlign:"left"}} onClick={()=>{setShowAIPanel(true);setMenuOpen(false);}}>
+              <Icon d={ic.sparkle} size={18} stroke="#a5b4fc"/> Assistente IA
+            </button>
+            <button style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderRadius:12,border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:500,background:"transparent",color:compactMode?B.green:B.textSub,textAlign:"left"}} onClick={()=>setCompactMode(c=>!c)}>
+              <Icon d={ic.grid} size={18} stroke={compactMode?B.green:B.textMuted}/>{compactMode?"Modo completo":"Modo compacto"}
+            </button>
+            <div style={{flex:1}}/>
+            <button style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderRadius:12,border:"none",cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",fontSize:14,fontWeight:500,background:"rgba(239,68,68,.1)",color:B.danger,textAlign:"left"}} onClick={()=>signOut(auth)}>
+              <Icon d={ic.logout||ic.x} size={18} stroke={B.danger}/> Sair da conta
+            </button>
+          </div>
+        </div>
+      )}
 
       <main style={S.main}>
         {activeTab==="dashboard"&&(
           <div style={S.section}>
+
+            {/* MODO COMPACTO - RESUMO EXECUTIVO */}
+            {compactMode&&(
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                  <div style={{flex:1,minWidth:140,background:B.navyMid,borderRadius:14,padding:16,border:`1px solid rgba(51,214,159,.12)`}}>
+                    <div style={{fontSize:10,color:B.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em"}}>Receita</div>
+                    <div style={{fontSize:22,fontWeight:800,color:B.green,marginTop:4}}>{fmtH(totalRevenue)}</div>
+                    <div style={{fontSize:11,color:B.textMuted,marginTop:2}}>Recebido: {fmtH(receivedRev)}</div>
+                  </div>
+                  <div style={{flex:1,minWidth:140,background:B.navyMid,borderRadius:14,padding:16,border:`1px solid rgba(251,191,36,.12)`}}>
+                    <div style={{fontSize:10,color:B.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em"}}>Despesas</div>
+                    <div style={{fontSize:22,fontWeight:800,color:B.warning,marginTop:4}}>{fmtH(totalExpenses)}</div>
+                    <div style={{fontSize:11,color:B.textMuted,marginTop:2}}>Pago: {fmtH(paidExp)}</div>
+                  </div>
+                </div>
+                <div style={{background:B.navyMid,borderRadius:14,padding:16,border:`1px solid ${balance>=0?"rgba(99,102,241,.2)":"rgba(239,68,68,.2)"}`}}>
+                  <div style={{fontSize:10,color:B.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em"}}>Saldo</div>
+                  <div style={{fontSize:28,fontWeight:800,color:balance>=0?"#6366f1":B.danger,marginTop:4}}>{fmtH(balance)}</div>
+                  <div style={{height:6,background:B.border,borderRadius:99,marginTop:10,overflow:"hidden"}}><div style={{width:`${Math.min(pct(totalExpenses,totalRevenue),100)}%`,height:"100%",borderRadius:99,background:pct(totalExpenses,totalRevenue)>80?B.danger:pct(totalExpenses,totalRevenue)>60?B.warning:B.green}}/></div>
+                  <div style={{fontSize:11,color:B.textMuted,marginTop:4}}>{pct(totalExpenses,totalRevenue)}% da receita comprometida</div>
+                </div>
+                {upcomingDue.length>0&&(
+                  <div style={{background:"rgba(251,191,36,.08)",border:"1px solid rgba(251,191,36,.2)",borderRadius:12,padding:12}}>
+                    <div style={{fontWeight:700,fontSize:12,color:B.warning,marginBottom:6}}>⏰ Vencendo em breve</div>
+                    {upcomingDue.slice(0,2).map(e=><div key={e.id} style={{fontSize:12,color:B.textSub,marginTop:2}}>{e.description} · {fmtH(e.value)}</div>)}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* MODO COMPLETO */}
+            {!compactMode&&<>
 
             {/* ALERTAS NO TOPO */}
             {(upcomingDue.length>0||pendingRevenues.length>0||cardsNearLimit.length>0)&&(
@@ -946,6 +1030,32 @@ function Dashboard({user,familyId,theme,setTheme}){
               </div>
             </div>
 
+            {/* EVOLUÇÃO DO SALDO DIA A DIA */}
+            {dailyBalance.length>1&&(
+              <div style={S.card}>
+                <div style={S.cardTitle}>📈 Evolução do Saldo — {MONTHS_FULL[selMonth]}</div>
+                <div style={{position:"relative",height:100,display:"flex",alignItems:"flex-end",gap:2,marginBottom:8}}>
+                  {dailyBalance.map((d,i)=>{
+                    const maxB=Math.max(...dailyBalance.map(x=>Math.abs(x.balance)),1);
+                    const h=Math.abs(d.balance)/maxB*80;
+                    const isNeg=d.balance<0;
+                    const isToday=d.day===new Date().getDate()&&selMonth===CURRENT_MONTH&&selYear===CURRENT_YEAR;
+                    return(
+                      <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                        <div style={{width:"100%",height:h,borderRadius:"3px 3px 0 0",background:isNeg?B.danger:isToday?B.green:"#6366f1",opacity:isToday?1:0.6,minHeight:2,transition:"height .3s"}}/>
+                        {(i===0||i===dailyBalance.length-1||isToday)&&<div style={{fontSize:8,color:isToday?B.green:B.textMuted,fontWeight:isToday?700:400}}>{d.day}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:B.textMuted}}>
+                  <span>Dia 1</span>
+                  <span style={{color:dailyBalance[dailyBalance.length-1]?.balance>=0?"#6366f1":B.danger,fontWeight:700}}>Hoje: {fmtH(dailyBalance[dailyBalance.length-1]?.balance||0)}</span>
+                  <span>Dia {new Date(selYear,selMonth+1,0).getDate()}</span>
+                </div>
+              </div>
+            )}
+
             {/* SALDO DO MÊS ANTERIOR */}
             {prevMonthBalance>0&&!revenues.find(r=>r.isCarryover&&r.month===selMonth&&r.year===selYear)&&(
               <div style={{background:`${B.green}12`,border:`1px solid ${B.green}33`,borderRadius:14,padding:14,display:"flex",alignItems:"center",gap:12}}>
@@ -988,6 +1098,7 @@ function Dashboard({user,familyId,theme,setTheme}){
               <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:B.textMuted,marginTop:6}}><span>5%</span><span style={{fontWeight:700,color:B.green}}>{savingGoal}%</span><span>50%</span></div>
             </div>
 
+            </>}
           </div>
         )}
         {activeTab==="expenses"&&(
