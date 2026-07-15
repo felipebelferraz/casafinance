@@ -45,6 +45,8 @@ const Icon = ({ d, size=16, stroke="currentColor", fill="none", strokeWidth=1.8 
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
 );
 const ic = {
+  eye:"M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6",
+  eyeOff:"M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24 M1 1l22 22",
   plus:"M12 5v14M5 12h14", check:"M20 6L9 17l-5-5", trash:"M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6",
   edit:"M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z",
   car:"M5 17H3a2 2 0 01-2-2V9a2 2 0 012-2h14l4 4v4a2 2 0 01-2 2h-2M5 17a2 2 0 104 0 2 2 0 00-4 0zm10 0a2 2 0 104 0 2 2 0 00-4 0z",
@@ -432,6 +434,8 @@ function Dashboard({user,familyId,theme,setTheme}){
   const [toast,setToast]=useState(null);
   const [lightboxGroup,setLightboxGroup]=useState(null);
   const [copiedCode,setCopiedCode]=useState(false);
+  const [hideValues,setHideValues]=useState(false);
+  const fmtH=(v)=>hideValues?"R$ ••••":fmt(v);
 
   const notify=(msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),3000);};
 
@@ -468,6 +472,50 @@ function Dashboard({user,familyId,theme,setTheme}){
     const prevRev=revenues.filter(r=>r.month===pm&&r.year===py).reduce((s,r)=>s+(r.value||0),0);
     return prevRev-prevExp;
   },[expenses,revenues,selMonth,selYear]);
+
+  // Comparativo com mês anterior
+  const prevMonthExpenses=useMemo(()=>{
+    const pm=selMonth===0?11:selMonth-1;
+    const py=selMonth===0?selYear-1:selYear;
+    return expenses.filter(e=>e.month===pm&&e.year===py).reduce((s,e)=>s+(e.value||0),0);
+  },[expenses,selMonth,selYear]);
+
+  const prevMonthRevenue=useMemo(()=>{
+    const pm=selMonth===0?11:selMonth-1;
+    const py=selMonth===0?selYear-1:selYear;
+    return revenues.filter(r=>r.month===pm&&r.year===py).reduce((s,r)=>s+(r.value||0),0);
+  },[revenues,selMonth,selYear]);
+
+  const expDiff=totalExpenses-prevMonthExpenses;
+  const expDiffPct=prevMonthExpenses>0?Math.round((expDiff/prevMonthExpenses)*100):0;
+
+  // Previsão de fechamento do mês
+  const today=new Date();
+  const daysInMonth=new Date(selYear,selMonth+1,0).getDate();
+  const dayOfMonth=selMonth===CURRENT_MONTH&&selYear===CURRENT_YEAR?today.getDate():daysInMonth;
+  const projectedExpenses=dayOfMonth>0?Math.round((totalExpenses/dayOfMonth)*daysInMonth):totalExpenses;
+  const projectedBalance=totalRevenue-projectedExpenses;
+
+  // Alertas de vencimento próximo (próximos 3 dias)
+  const upcomingDue=useMemo(()=>{
+    const now=new Date();
+    return monthExpenses.filter(e=>{
+      if(e.paid)return false;
+      if(e.dueDate){const d=new Date(e.dueDate);const diff=(d-now)/(1000*60*60*24);return diff>=0&&diff<=3;}
+      if(e.dueDay){const d=new Date(selYear,selMonth,e.dueDay);const diff=(d-now)/(1000*60*60*24);return diff>=0&&diff<=3;}
+      return false;
+    }).sort((a,b)=>{
+      const da=a.dueDate?new Date(a.dueDate):new Date(selYear,selMonth,a.dueDay||31);
+      const db2=b.dueDate?new Date(b.dueDate):new Date(selYear,selMonth,b.dueDay||31);
+      return da-db2;
+    });
+  },[monthExpenses,selMonth,selYear]);
+
+  // Receitas pendentes
+  const pendingRevenues=useMemo(()=>monthRevenues.filter(r=>!r.received),[monthRevenues]);
+
+  // Cartões próximos do limite (>80%)
+  const cardsNearLimit=useMemo(()=>cards.filter(c=>{const used=c.used||0;return c.limit>0&&(used/c.limit)>=0.8;}),[cards]);
 
   const history=useMemo(()=>{
     const arr=[];
@@ -616,6 +664,8 @@ function Dashboard({user,familyId,theme,setTheme}){
 
   const toggleReceived=async(id)=>{const item=revenues.find(r=>r.id===id);await setDoc(doc(db,`${base}/revenues`,id),{...item,received:!item.received});};
   const deleteRevenue=async(id)=>{await deleteDoc(doc(db,`${base}/revenues`,id));notify("Receita removida");};
+  const duplicateExpense=async(item)=>{const id=`exp_${Date.now()}_dup`;await setDoc(doc(db,`${base}/expenses`,id),{...item,id,paid:false,authorUid:user.uid,authorName:user.displayName});notify("Despesa duplicada! Edite conforme necessário.");};
+  const duplicateRevenue=async(item)=>{const id=`rev_${Date.now()}_dup`;await setDoc(doc(db,`${base}/revenues`,id),{...item,id,received:false,authorUid:user.uid,authorName:user.displayName});notify("Receita duplicada! Edite conforme necessário.");};
 
   const copyExpensesToNextMonth=async()=>{
     if(selectedExp.length===0){notify("Selecione ao menos uma despesa.");return;}
@@ -786,6 +836,9 @@ function Dashboard({user,familyId,theme,setTheme}){
             <button style={{background:"linear-gradient(135deg,rgba(99,102,241,.2),rgba(51,214,159,.15))",border:`1px solid rgba(99,102,241,.3)`,cursor:"pointer",padding:"6px 10px",borderRadius:8,display:"flex",alignItems:"center",gap:6,color:"#a5b4fc",fontSize:11,fontWeight:700,fontFamily:"'Plus Jakarta Sans',sans-serif"}} onClick={()=>setShowAIPanel(true)}>
               <Icon d={ic.sparkle} size={14} stroke="#a5b4fc"/> IA
             </button>
+            <button style={{background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)",cursor:"pointer",padding:"6px 10px",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setHideValues(v=>!v)} title={hideValues?"Mostrar valores":"Ocultar valores"}>
+              <Icon d={hideValues?ic.eyeOff:ic.eye} size={16} stroke={hideValues?B.textMuted:B.green}/>
+            </button>
           </div>
         </div>
         {members.length>1&&(
@@ -809,43 +862,136 @@ function Dashboard({user,familyId,theme,setTheme}){
       <main style={S.main}>
         {activeTab==="dashboard"&&(
           <div style={S.section}>
-            {members.length>1&&(<div style={S.card}><div style={S.cardTitle}><Icon d={ic.users} size={14} stroke={B.green}/>Contribuição da Família — {MONTHS_FULL[selMonth]}</div>{memberContrib.map((m,i)=>(<div key={m.uid} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${B.border}`}}><div style={{width:36,height:36,borderRadius:"50%",background:memberColors[i%memberColors.length],display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:15,flexShrink:0}}>{m.name?m.name[0].toUpperCase():"?"}</div><div style={{flex:1}}><div style={{fontWeight:700,fontSize:13,color:B.text}}>{m.name?.split(" ")[0]}{m.uid===user.uid?" 👤":""}</div><div style={{fontSize:11,color:B.textMuted}}>Receitas: {fmt(m.revTotal)}</div></div><div style={{textAlign:"right"}}><div style={{fontWeight:700,fontSize:13,color:B.danger}}>{fmt(m.expTotal)}</div><div style={{fontSize:10,color:B.textMuted}}>em despesas</div></div></div>))}</div>)}
+
+            {/* ALERTAS NO TOPO */}
+            {(upcomingDue.length>0||pendingRevenues.length>0||cardsNearLimit.length>0)&&(
+              <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:4}}>
+                {upcomingDue.length>0&&(
+                  <div style={{background:"rgba(251,191,36,.08)",border:"1px solid rgba(251,191,36,.25)",borderRadius:14,padding:"12px 16px",display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{fontSize:22}}>⏰</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,fontSize:13,color:B.warning}}>Vencendo em breve</div>
+                      {upcomingDue.slice(0,3).map(e=>(
+                        <div key={e.id} style={{fontSize:12,color:B.textSub,marginTop:2}}>{e.description} · {fmtH(e.value)} · {e.dueDate||`dia ${e.dueDay}`}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {pendingRevenues.length>0&&(
+                  <div style={{background:"rgba(51,214,159,.06)",border:"1px solid rgba(51,214,159,.2)",borderRadius:14,padding:"12px 16px",display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{fontSize:22}}>💰</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,fontSize:13,color:B.green}}>{pendingRevenues.length} receita(s) a receber</div>
+                      <div style={{fontSize:12,color:B.textSub,marginTop:2}}>Total pendente: {fmtH(pendingRevenues.reduce((s,r)=>s+(r.value||0),0))}</div>
+                    </div>
+                  </div>
+                )}
+                {cardsNearLimit.length>0&&(
+                  <div style={{background:"rgba(239,68,68,.07)",border:"1px solid rgba(239,68,68,.2)",borderRadius:14,padding:"12px 16px",display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{fontSize:22}}>💳</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:700,fontSize:13,color:B.danger}}>Cartão(ões) próximo(s) do limite</div>
+                      {cardsNearLimit.map(c=>(
+                        <div key={c.id} style={{fontSize:12,color:B.textSub,marginTop:2}}>{c.name} · {Math.round(((c.used||0)/c.limit)*100)}% utilizado</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* KPIs PRINCIPAIS */}
             <div style={S.kpiGrid}>
-              <KpiCard label="Receita" value={fmt(totalRevenue)} icon="wallet" color={B.green} sub={`Recebido: ${fmt(receivedRev)}`}/>
-              <KpiCard label="Despesas" value={fmt(totalExpenses)} icon="tag" color={B.warning} sub={`${pct(totalExpenses,totalRevenue)}% da receita`}/>
-              <KpiCard label="Saldo" value={fmt(balance)} icon="chart" color={balance>=0?"#6366f1":B.danger} sub={balance>=0?"✓ No azul":"⚠ No vermelho"}/>
-              <KpiCard label="Meta Economia" value={fmt(savingTarget)} icon="target" color="#ec4899" sub={`${savingGoal}% · ${balance>=savingTarget?"✓ Atingida!":"Faltam "+fmt(savingTarget-balance)}`}/>
+              <KpiCard label="Receita" value={fmtH(totalRevenue)} icon="wallet" color={B.green} sub={`Recebido: ${fmtH(receivedRev)}`}/>
+              <KpiCard label="Despesas" value={fmtH(totalExpenses)} icon="tag" color={B.warning} sub={`${pct(totalExpenses,totalRevenue)}% da receita`}/>
+              <KpiCard label="Saldo" value={fmtH(balance)} icon="chart" color={balance>=0?"#6366f1":B.danger} sub={balance>=0?"✓ No azul":"⚠ No vermelho"}/>
+              <KpiCard label="Meta Economia" value={fmtH(savingTarget)} icon="target" color="#ec4899" sub={`${savingGoal}% · ${balance>=savingTarget?"✓ Atingida!":"Faltam "+fmtH(savingTarget-balance)}`}/>
             </div>
+
+            {/* COMPARATIVO COM MÊS ANTERIOR */}
+            <div style={S.card}>
+              <div style={S.cardTitle}>📊 Comparativo — {MONTHS_FULL[selMonth===0?11:selMonth-1]} vs {MONTHS_FULL[selMonth]}</div>
+              <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                <div style={{flex:1,minWidth:120,background:B.bg,borderRadius:10,padding:12,textAlign:"center"}}>
+                  <div style={{fontSize:10,color:B.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Mês anterior</div>
+                  <div style={{fontSize:16,fontWeight:800,color:B.warning}}>{fmtH(prevMonthExpenses)}</div>
+                  <div style={{fontSize:10,color:B.textMuted,marginTop:2}}>em despesas</div>
+                </div>
+                <div style={{flex:1,minWidth:120,background:B.bg,borderRadius:10,padding:12,textAlign:"center"}}>
+                  <div style={{fontSize:10,color:B.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Mês atual</div>
+                  <div style={{fontSize:16,fontWeight:800,color:B.warning}}>{fmtH(totalExpenses)}</div>
+                  <div style={{fontSize:10,marginTop:2,fontWeight:700,color:expDiff>0?B.danger:B.green}}>{expDiff>0?`▲ +${fmtH(expDiff)} (+${expDiffPct}%)`:`▼ ${fmtH(Math.abs(expDiff))} (${expDiffPct}%)`}</div>
+                </div>
+                <div style={{flex:1,minWidth:120,background:B.bg,borderRadius:10,padding:12,textAlign:"center"}}>
+                  <div style={{fontSize:10,color:B.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Previsão fechamento</div>
+                  <div style={{fontSize:16,fontWeight:800,color:projectedBalance>=0?"#6366f1":B.danger}}>{fmtH(projectedBalance)}</div>
+                  <div style={{fontSize:10,color:B.textMuted,marginTop:2}}>saldo estimado</div>
+                </div>
+              </div>
+            </div>
+
+            {/* BARRA DE PROGRESSO DO ORÇAMENTO */}
+            <div style={S.card}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <div style={S.cardTitle}>💡 Orçamento — {MONTHS_FULL[selMonth]}</div>
+                <div style={{fontSize:12,fontWeight:700,color:pct(totalExpenses,totalRevenue)>80?B.danger:pct(totalExpenses,totalRevenue)>60?B.warning:B.green}}>{pct(totalExpenses,totalRevenue)}% utilizado</div>
+              </div>
+              <div style={{height:10,background:B.border,borderRadius:99,overflow:"hidden",marginBottom:8}}>
+                <div style={{width:`${Math.min(pct(totalExpenses,totalRevenue),100)}%`,height:"100%",borderRadius:99,background:pct(totalExpenses,totalRevenue)>80?B.danger:pct(totalExpenses,totalRevenue)>60?B.warning:B.green,transition:"width .5s"}}/>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:B.textMuted}}>
+                <span>Gasto: {fmtH(totalExpenses)}</span>
+                <span>Disponível: {fmtH(Math.max(totalRevenue-totalExpenses,0))}</span>
+                <span>Receita: {fmtH(totalRevenue)}</span>
+              </div>
+            </div>
+
+            {/* SALDO DO MÊS ANTERIOR */}
             {prevMonthBalance>0&&!revenues.find(r=>r.isCarryover&&r.month===selMonth&&r.year===selYear)&&(
               <div style={{background:`${B.green}12`,border:`1px solid ${B.green}33`,borderRadius:14,padding:14,display:"flex",alignItems:"center",gap:12}}>
                 <div style={{fontSize:28}}>💰</div>
-                <div style={{flex:1}}><div style={{fontWeight:700,fontSize:13,color:B.text}}>Saldo disponível do mês anterior</div><div style={{fontSize:20,fontWeight:800,color:B.green}}>{fmt(prevMonthBalance)}</div><div style={{fontSize:11,color:B.textMuted}}>Sobra de {MONTHS[selMonth===0?11:selMonth-1]}</div></div>
+                <div style={{flex:1}}><div style={{fontWeight:700,fontSize:13,color:B.text}}>Saldo disponível do mês anterior</div><div style={{fontSize:20,fontWeight:800,color:B.green}}>{fmtH(prevMonthBalance)}</div><div style={{fontSize:11,color:B.textMuted}}>Sobra de {MONTHS[selMonth===0?11:selMonth-1]}</div></div>
                 <button style={{background:B.green,color:"#071C2C",border:"none",borderRadius:10,padding:"10px 14px",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'Plus Jakarta Sans',sans-serif",whiteSpace:"nowrap"}} onClick={addCarryover}>+ Adicionar como receita</button>
               </div>
             )}
-            {cards.length>0&&(<div style={S.card}><div style={S.cardTitle}><Icon d={ic.credit} size={14} stroke={B.green}/>Limites Disponíveis</div><div style={{display:"flex",gap:10,flexWrap:"wrap"}}>{cards.map(c=>{const used=c.used||0;const avail=(c.limit||0)-used;return(<div key={c.id} style={{flex:"1 1 130px",minWidth:0,maxWidth:"100%",background:`linear-gradient(135deg,${c.color},${c.color}aa)`,borderRadius:12,padding:12,color:"#fff"}}><div style={{fontSize:11,opacity:.8,marginBottom:4}}>{c.name}</div><div style={{fontSize:18,fontWeight:800}}>{fmt(avail)}</div><div style={{fontSize:10,opacity:.7}}>de {fmt(c.limit)}</div><div style={{height:3,background:"rgba(255,255,255,.2)",borderRadius:99,marginTop:8}}><div style={{width:`${pct(used,c.limit)}%`,height:"100%",background:"rgba(255,255,255,.8)",borderRadius:99}}/></div></div>);})}</div></div>)}
+
+            {/* CARTÕES */}
+            {cards.length>0&&(<div style={S.card}><div style={S.cardTitle}><Icon d={ic.credit} size={14} stroke={B.green}/>Limites Disponíveis</div><div style={{display:"flex",gap:10,flexWrap:"wrap"}}>{cards.map(c=>{const used=c.used||0;const avail=(c.limit||0)-used;return(<div key={c.id} style={{flex:"1 1 130px",minWidth:0,maxWidth:"100%",background:`linear-gradient(135deg,${c.color},${c.color}aa)`,borderRadius:12,padding:12,color:"#fff"}}><div style={{fontSize:11,opacity:.8,marginBottom:4}}>{c.name}</div><div style={{fontSize:18,fontWeight:800}}>{fmtH(avail)}</div><div style={{fontSize:10,opacity:.7}}>de {fmtH(c.limit)}</div><div style={{height:3,background:"rgba(255,255,255,.2)",borderRadius:99,marginTop:8}}><div style={{width:`${pct(used,c.limit)}%`,height:"100%",background:"rgba(255,255,255,.8)",borderRadius:99}}/></div></div>);})}</div></div>)}
+
+            {/* RESUMO COM BARRAS */}
             <div style={S.card}>
               <div style={S.cardTitle}>Resumo Financeiro — {MONTHS_FULL[selMonth]}/{selYear}</div>
               <ProgressRow label="Pago" value={paidExp} total={totalRevenue} color={B.green}/>
               <ProgressRow label="Em Aberto" value={totalExpenses-paidExp} total={totalRevenue} color={B.warning}/>
               <ProgressRow label="Meta Economia" value={savingTarget} total={totalRevenue} color="#ec4899"/>
               <div style={{height:1,background:B.border,margin:"10px 0"}}/>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:13,color:B.textSub}}><span>Receita total</span><strong style={{color:B.text}}>{fmt(totalRevenue)}</strong></div>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:13,color:B.textSub}}><span>Receita total</span><strong style={{color:B.text}}>{fmtH(totalRevenue)}</strong></div>
             </div>
-            {alerts.length>0&&(<div style={S.card}><div style={S.cardTitle}>⚠ Variações de Gasto</div>{alerts.map((a,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:`1px solid ${B.border}`}}><Icon d={ic.warning} size={16} stroke={B.warning}/><div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:B.text}}>{a.desc}</div><div style={{fontSize:12,color:B.textMuted}}>{fmt(a.prev)} → {fmt(a.curr)}</div></div><div style={{background:"#fef9c3",color:"#b45309",fontWeight:700,fontSize:11,padding:"3px 8px",borderRadius:99}}>+{a.pct}%</div></div>))}</div>)}
-            {byGroup.length>0&&(<div style={S.card}><div style={S.cardTitle}>Distribuição por Grupo <span style={{fontSize:11,color:B.textMuted,fontWeight:400}}>· clique para detalhar</span></div><div style={{display:"flex",gap:24,alignItems:"center",flexWrap:"wrap"}}><PieChart data={pieData} onSliceClick={g=>{const full=byGroup.find(x=>x.id===g.id);setLightboxGroup(full);}}/><div style={{flex:1,display:"flex",flexDirection:"column",gap:8,minWidth:160}}>{pieData.map(g=>(<div key={g.id} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"4px 8px",borderRadius:8}} onClick={()=>{const full=byGroup.find(x=>x.id===g.id);setLightboxGroup(full);}}><div style={{width:10,height:10,borderRadius:3,background:g.color,flexShrink:0}}/><span style={{fontSize:12,color:B.textSub,flex:1}}>{g.name}</span><span style={{fontSize:12,fontWeight:700,color:g.color}}>{g.pct}%</span><span style={{fontSize:11,color:B.textMuted}}>{fmt(g.total)}</span></div>))}</div></div></div>)}
+
+            {/* CONTRIBUIÇÃO DA FAMÍLIA */}
+            {members.length>1&&(<div style={S.card}><div style={S.cardTitle}><Icon d={ic.users} size={14} stroke={B.green}/>Contribuição da Família — {MONTHS_FULL[selMonth]}</div>{memberContrib.map((m,i)=>(<div key={m.uid} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${B.border}`}}><div style={{width:36,height:36,borderRadius:"50%",background:memberColors[i%memberColors.length],display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:15,flexShrink:0}}>{m.name?m.name[0].toUpperCase():"?"}</div><div style={{flex:1}}><div style={{fontWeight:700,fontSize:13,color:B.text}}>{m.name?.split(" ")[0]}{m.uid===user.uid?" 👤":""}</div><div style={{fontSize:11,color:B.textMuted}}>Receitas: {fmtH(m.revTotal)}</div></div><div style={{textAlign:"right"}}><div style={{fontWeight:700,fontSize:13,color:B.danger}}>{fmtH(m.expTotal)}</div><div style={{fontSize:10,color:B.textMuted}}>em despesas</div></div></div>))}</div>)}
+
+            {/* ALERTAS DE VARIAÇÃO */}
+            {alerts.length>0&&(<div style={S.card}><div style={S.cardTitle}>⚠ Variações de Gasto</div>{alerts.map((a,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:`1px solid ${B.border}`}}><Icon d={ic.warning} size={16} stroke={B.warning}/><div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:B.text}}>{a.desc}</div><div style={{fontSize:12,color:B.textMuted}}>{fmtH(a.prev)} → {fmtH(a.curr)}</div></div><div style={{background:"#fef9c3",color:"#b45309",fontWeight:700,fontSize:11,padding:"3px 8px",borderRadius:99}}>+{a.pct}%</div></div>))}</div>)}
+
+            {/* GRÁFICO DE PIZZA */}
+            {byGroup.length>0&&(<div style={S.card}><div style={S.cardTitle}>Distribuição por Grupo <span style={{fontSize:11,color:B.textMuted,fontWeight:400}}>· clique para detalhar</span></div><div style={{display:"flex",gap:24,alignItems:"center",flexWrap:"wrap"}}><PieChart data={pieData} onSliceClick={g=>{const full=byGroup.find(x=>x.id===g.id);setLightboxGroup(full);}}/><div style={{flex:1,display:"flex",flexDirection:"column",gap:8,minWidth:160}}>{pieData.map(g=>(<div key={g.id} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"4px 8px",borderRadius:8}} onClick={()=>{const full=byGroup.find(x=>x.id===g.id);setLightboxGroup(full);}}><div style={{width:10,height:10,borderRadius:3,background:g.color,flexShrink:0}}/><span style={{fontSize:12,color:B.textSub,flex:1}}>{g.name}</span><span style={{fontSize:12,fontWeight:700,color:g.color}}>{g.pct}%</span><span style={{fontSize:11,color:B.textMuted}}>{fmtH(g.total)}</span></div>))}</div></div></div>)}
+
+            {/* META DE ECONOMIA */}
             <div style={S.card}>
               <div style={S.cardTitle}>🎯 Meta de Economia — {MONTHS_FULL[selMonth]}</div>
               <div style={{background:B.bg,borderRadius:12,padding:14,marginBottom:12,border:`1px solid ${B.border}`}}>
-                <div style={{fontSize:13,color:B.textSub,lineHeight:1.8}}>Receita: <strong style={{color:B.green}}>{fmt(totalRevenue)}</strong> · Meta: <strong style={{color:"#6366f1"}}>{savingGoal}%</strong> = <strong style={{color:"#6366f1"}}>{fmt(savingTarget)}</strong></div>
-                <div style={{marginTop:8,fontSize:13,fontWeight:700,color:balance>=savingTarget?B.green:B.danger}}>{balance>=savingTarget?`✓ Saldo de ${fmt(balance)} — meta atingida!`:`⚠ Saldo atual ${fmt(balance)} — faltam ${fmt(savingTarget-balance)}`}</div>
+                <div style={{fontSize:13,color:B.textSub,lineHeight:1.8}}>Receita: <strong style={{color:B.green}}>{fmtH(totalRevenue)}</strong> · Meta: <strong style={{color:"#6366f1"}}>{savingGoal}%</strong> = <strong style={{color:"#6366f1"}}>{fmtH(savingTarget)}</strong></div>
+                <div style={{marginTop:8,fontSize:13,fontWeight:700,color:balance>=savingTarget?B.green:B.danger}}>{balance>=savingTarget?`✓ Saldo de ${fmtH(balance)} — meta atingida!`:`⚠ Saldo atual ${fmtH(balance)} — faltam ${fmtH(savingTarget-balance)}`}</div>
               </div>
               <input type="range" min={5} max={50} value={savingGoal} onChange={e=>saveSavingGoal(+e.target.value)}/>
               <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:B.textMuted,marginTop:6}}><span>5%</span><span style={{fontWeight:700,color:B.green}}>{savingGoal}%</span><span>50%</span></div>
             </div>
+
           </div>
         )}
         {activeTab==="expenses"&&(
+
           <div style={S.section}>
             <div style={S.card}>
               <div style={S.cardTitle}>Total Despesas — {MONTHS_FULL[selMonth]}</div>
@@ -873,7 +1019,7 @@ function Dashboard({user,familyId,theme,setTheme}){
                 </div>
               )}
             </div>
-            {groups.map(g=>{const items=monthExpenses.filter(e=>e.groupId===g.id);if(items.length===0)return null;return <GroupSection key={g.id} group={g} items={items} total={items.reduce((s,e)=>s+(e.value||0),0)} onToggle={togglePaid} onEdit={item=>{setEditItem(item);setShowForm(true);}} onDelete={deleteExpense} onDeleteGroup={deleteGroup} onEditGroup={g=>{setEditGroup(g);setShowGroupForm(true);}} isOverdue={isExpenseOverdue} selectMode={selectMode} selectedIds={selectedExp} onSelectItem={id=>setSelectedExp(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id])}/>;
+            {groups.map(g=>{const items=monthExpenses.filter(e=>e.groupId===g.id);if(items.length===0)return null;return <GroupSection key={g.id} group={g} items={items} total={items.reduce((s,e)=>s+(e.value||0),0)} onToggle={togglePaid} onEdit={item=>{setEditItem(item);setShowForm(true);}} onDelete={deleteExpense} onDeleteGroup={deleteGroup} onEditGroup={g=>{setEditGroup(g);setShowGroupForm(true);}} isOverdue={isExpenseOverdue} selectMode={selectMode} selectedIds={selectedExp} onSelectItem={id=>setSelectedExp(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id])} onDuplicate={duplicateExpense}/>;
             })}
             {monthExpenses.length===0&&<div style={S.emptyState}><div style={{fontSize:48}}>📂</div><div style={{color:B.textMuted,fontSize:14}}>Nenhuma despesa em {MONTHS_FULL[selMonth]}</div><button style={S.btnPrimary} onClick={()=>setShowForm(true)}>Adicionar primeira despesa</button></div>}
             {showForm&&<Modal onClose={()=>{setShowForm(false);setEditItem(null);}} title={editItem?"Editar Despesa":"Nova Despesa"}><ExpenseForm groups={groups} cards={cards} item={editItem} selMonth={selMonth} selYear={selYear} onSave={saveExpense} onClose={()=>{setShowForm(false);setEditItem(null);}}/></Modal>}
@@ -938,6 +1084,7 @@ function Dashboard({user,familyId,theme,setTheme}){
                         {r.authorName&&<div style={{fontSize:10,color:B.green}}>👤 {r.authorName}</div>}
                       </div>
                       <div style={{fontWeight:700,fontSize:14,color:r.received?B.green:isRevenueOverdue(r)?B.danger:B.navy}}>{fmt(r.value)}</div>
+                      <button style={S.iconBtn} onClick={()=>duplicateRevenue(r)} title="Duplicar"><Icon d={ic.copy||ic.plus} size={13} stroke="#22d3ee"/></button>
                       <button style={S.iconBtn} onClick={()=>{setEditItem(r);setShowRevForm(true);}}><Icon d={ic.edit} size={13} stroke="#6366f1"/></button>
                       <button style={S.iconBtn} onClick={()=>deleteRevenue(r.id)}><Icon d={ic.trash} size={13} stroke={B.danger}/></button>
                     </div>
@@ -1049,14 +1196,14 @@ function KpiCard({label,value,icon,color,sub}){return(<div style={{...S.kpiCard,
 
 function ProgressRow({label,value,total,color}){return(<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",fontSize:12,width:130,flexShrink:0,color:B.textSub}}><span>{label}</span><span style={{color}}>{fmt(value)}</span></div><div style={{flex:1,height:5,background:B.border,borderRadius:99}}><div style={{width:`${pct(value,total)}%`,height:"100%",borderRadius:99,background:color,transition:"width .5s"}}/></div><span style={{fontSize:11,color:B.textMuted,width:32,textAlign:"right"}}>{pct(value,total)}%</span></div>);}
 
-function GroupSection({group,items,total,onToggle,onEdit,onDelete,onDeleteGroup,onEditGroup,isOverdue,selectMode,selectedIds,onSelectItem}){
+function GroupSection({group,items,total,onToggle,onEdit,onDelete,onDeleteGroup,onEditGroup,isOverdue,selectMode,selectedIds,onSelectItem,onDuplicate}){
   const [open,setOpen]=useState(true);
-  return(<div style={S.groupCard}><div style={S.groupHeader} onClick={()=>setOpen(o=>!o)}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:10,height:10,borderRadius:"50%",background:group.color}}/><span style={{fontWeight:700,fontSize:14,color:B.text}}>{group.name}</span><span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${group.color}18`,color:group.color}}>{items.length}</span></div><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontWeight:700,fontSize:14,color:B.text}}>{fmt(total)}</span><button style={{...S.iconBtn,padding:2}} onClick={e=>{e.stopPropagation();onEditGroup&&onEditGroup(group);}}><Icon d={ic.edit} size={12} stroke="#6366f1"/></button><button style={{...S.iconBtn,padding:2}} onClick={e=>{e.stopPropagation();if(window.confirm("Remover grupo?"))onDeleteGroup(group.id);}}><Icon d={ic.trash} size={12} stroke={B.danger}/></button><Icon d={open?ic.chevron_down:ic.chevron_right} size={14} stroke={B.grayMid}/></div></div>{open&&items.map(item=><ExpenseRow key={item.id} item={item} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} isOverdue={isOverdue} selectMode={selectMode} selected={selectedIds&&selectedIds.includes(item.id)} onSelectItem={onSelectItem}/>)}</div>);
+  return(<div style={S.groupCard}><div style={S.groupHeader} onClick={()=>setOpen(o=>!o)}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:10,height:10,borderRadius:"50%",background:group.color}}/><span style={{fontWeight:700,fontSize:14,color:B.text}}>{group.name}</span><span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${group.color}18`,color:group.color}}>{items.length}</span></div><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontWeight:700,fontSize:14,color:B.text}}>{fmt(total)}</span><button style={{...S.iconBtn,padding:2}} onClick={e=>{e.stopPropagation();onEditGroup&&onEditGroup(group);}}><Icon d={ic.edit} size={12} stroke="#6366f1"/></button><button style={{...S.iconBtn,padding:2}} onClick={e=>{e.stopPropagation();if(window.confirm("Remover grupo?"))onDeleteGroup(group.id);}}><Icon d={ic.trash} size={12} stroke={B.danger}/></button><Icon d={open?ic.chevron_down:ic.chevron_right} size={14} stroke={B.grayMid}/></div></div>{open&&items.map(item=><ExpenseRow key={item.id} item={item} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} isOverdue={isOverdue} selectMode={selectMode} selected={selectedIds&&selectedIds.includes(item.id)} onSelectItem={onSelectItem} onDuplicate={onDuplicate}/>)}</div>);
 }
 
-function ExpenseRow({item,onToggle,onEdit,onDelete,isOverdue,selectMode,selected,onSelectItem}){
+function ExpenseRow({item,onToggle,onEdit,onDelete,isOverdue,selectMode,selected,onSelectItem,onDuplicate}){
   const overdue=isOverdue?isOverdue(item):false;
-  return(<div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:`1px solid ${B.bg}`,opacity:item.paid?0.6:1}}>{selectMode&&<input type="checkbox" checked={!!selected} onChange={()=>onSelectItem&&onSelectItem(item.id)} style={{width:18,height:18,flexShrink:0,accentColor:B.green,cursor:"pointer"}}/>}<button style={{width:22,height:22,borderRadius:6,border:`2px solid ${item.paid?B.green:overdue?B.danger:B.grayMid}`,background:item.paid?B.green:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} onClick={()=>onToggle(item.id)}>{item.paid&&<Icon d={ic.check} size={11} stroke="#fff" strokeWidth={2.5}/>}</button><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}><span style={{fontSize:13,fontWeight:600,color:B.text,textDecoration:item.paid?"line-through":"none"}}>{item.description}</span>{item.recurring&&<span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:B.greenDim,background:B.greenPale,padding:"2px 6px",borderRadius:99}}><Icon d={ic.repeat} size={10}/>recorrente</span>}{overdue&&<span style={{fontSize:10,color:"#fff",background:B.danger,padding:"2px 7px",borderRadius:99,fontWeight:700}}>● EM ATRASO</span>}</div><div style={{fontSize:11,color:B.textMuted,marginTop:2}}>{item.creditor}{item.dueDate?` · Vence ${item.dueDate}`:item.dueDay?` · Vence dia ${item.dueDay}`:""}{item.refMonth!==undefined?` · Ref: ${MONTHS[item.refMonth]}/${item.refYear||new Date().getFullYear()}`:""}</div>{item.authorName&&<div style={{fontSize:10,color:B.green}}>👤 {item.authorName}</div>}</div><div style={{fontWeight:700,fontSize:14,flexShrink:0,color:item.paid?B.green:overdue?B.danger:B.navy}}>{fmt(item.value)}</div><div style={{display:"flex",gap:4,flexShrink:0}}><button style={S.iconBtn} onClick={()=>onEdit(item)}><Icon d={ic.edit} size={13} stroke="#6366f1"/></button><button style={S.iconBtn} onClick={()=>onDelete(item.id)}><Icon d={ic.trash} size={13} stroke={B.danger}/></button></div></div>);
+  return(<div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:`1px solid ${B.bg}`,opacity:item.paid?0.6:1}}>{selectMode&&<input type="checkbox" checked={!!selected} onChange={()=>onSelectItem&&onSelectItem(item.id)} style={{width:18,height:18,flexShrink:0,accentColor:B.green,cursor:"pointer"}}/>}<button style={{width:22,height:22,borderRadius:6,border:`2px solid ${item.paid?B.green:overdue?B.danger:B.grayMid}`,background:item.paid?B.green:"transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}} onClick={()=>onToggle(item.id)}>{item.paid&&<Icon d={ic.check} size={11} stroke="#fff" strokeWidth={2.5}/>}</button><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}><span style={{fontSize:13,fontWeight:600,color:B.text,textDecoration:item.paid?"line-through":"none"}}>{item.description}</span>{item.recurring&&<span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:B.greenDim,background:B.greenPale,padding:"2px 6px",borderRadius:99}}><Icon d={ic.repeat} size={10}/>recorrente</span>}{overdue&&<span style={{fontSize:10,color:"#fff",background:B.danger,padding:"2px 7px",borderRadius:99,fontWeight:700}}>● EM ATRASO</span>}</div><div style={{fontSize:11,color:B.textMuted,marginTop:2}}>{item.creditor}{item.dueDate?` · Vence ${item.dueDate}`:item.dueDay?` · Vence dia ${item.dueDay}`:""}{item.refMonth!==undefined?` · Ref: ${MONTHS[item.refMonth]}/${item.refYear||new Date().getFullYear()}`:""}</div>{item.authorName&&<div style={{fontSize:10,color:B.green}}>👤 {item.authorName}</div>}</div><div style={{fontWeight:700,fontSize:14,flexShrink:0,color:item.paid?B.green:overdue?B.danger:B.navy}}>{fmt(item.value)}</div><div style={{display:"flex",gap:4,flexShrink:0}}><button style={S.iconBtn} onClick={()=>onDuplicate&&onDuplicate(item)} title="Duplicar"><Icon d={ic.copy||ic.plus} size={13} stroke="#22d3ee"/></button><button style={S.iconBtn} onClick={()=>onEdit(item)}><Icon d={ic.edit} size={13} stroke="#6366f1"/></button><button style={S.iconBtn} onClick={()=>onDelete(item.id)}><Icon d={ic.trash} size={13} stroke={B.danger}/></button></div></div>);
 }
 
 function Modal({onClose,title,children}){return(<div style={S.overlay} onClick={e=>e.target===e.currentTarget&&onClose()}><div style={S.modal}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}><span style={{fontWeight:700,fontSize:16,color:B.text}}>{title}</span><button style={S.closeBtn} onClick={onClose}><Icon d={ic.x} size={16} stroke={B.textSub}/></button></div>{children}</div></div>);}
